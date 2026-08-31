@@ -1,0 +1,22 @@
+appId: com.rcvd.simulator
+productName: RCVD Simulator
+directories:
+  output: release
+  buildResources: resources
+files:
+  - out/**/*
+  - package.json
+# The course notes ship alongside the app and are read at runtime, so they can
+# be corrected without a rebuild.
+extraResources:
+  - from: docs
+    to: docs
+    filter: ['**/*.md']
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
