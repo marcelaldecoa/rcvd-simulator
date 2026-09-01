@@ -16,7 +16,8 @@
     "test:watch": "vitest",
     "dist": "npm run build && electron-builder --win --config electron-builder.yml",
     "dev:web": "vite --config vite.web.config.ts",
-    "smoke": "tsx scripts/make-test-ibt.mts .smoke-session.ibt && electron scripts/smoke.mjs"
+    "smoke": "tsx scripts/make-test-ibt.mts .smoke-session.ibt && electron scripts/smoke.mjs",
+    "capture:overlay": "electron scripts/capture-overlay.mjs"
   },
   "dependencies": {
     "d3-array": "^3.2.4",

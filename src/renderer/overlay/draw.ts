@@ -108,11 +108,21 @@ function shadedAngle(
   ctx.arc(cx, cy, radius, -Math.PI / 2 - from, -Math.PI / 2 - to, to > from)
   ctx.closePath()
   ctx.fillStyle = colour
-  ctx.globalAlpha = 0.28
+  ctx.globalAlpha = 0.3
   ctx.fill()
   ctx.globalAlpha = 1
   ctx.strokeStyle = colour
   ctx.lineWidth = 1.5
+  ctx.stroke()
+
+  // A ray along the travel direction. Without it a small angle is a sliver a
+  // few pixels wide and reads as nothing at all -- which is exactly the case
+  // where the driver most needs to see that one end is quiet.
+  const tip = [cx - radius * Math.sin(to), cy - radius * Math.cos(to)] as const
+  ctx.beginPath()
+  ctx.moveTo(cx, cy)
+  ctx.lineTo(tip[0], tip[1])
+  ctx.lineWidth = 2
   ctx.stroke()
 }
 
@@ -175,7 +185,7 @@ export function drawOverlay(
 
   // ---- the diagram ------------------------------------------------------
   if (config.showDiagram) {
-    const boxH = Math.min(H - y - (config.showBars ? 46 * k : 14 * k), 120 * k)
+    const boxH = Math.min(H - y - (config.showBars ? 34 * k : 10 * k), 140 * k)
     if (boxH > 40) {
       drawSlipDiagram(ctx, pad, y, W - 2 * pad, boxH, reading, k, config.showNumbers)
       y += boxH + 6
@@ -190,7 +200,14 @@ export function drawOverlay(
   }
 }
 
-/** Front and rear slip angles as shaded angles either side of a car. */
+/**
+ * Front and rear slip angles as shaded angles at the two axles.
+ *
+ * Layout note, because the first version of this collided with itself: the
+ * exaggeration caption needs its own reserved strip at the bottom, or it lands
+ * on the rear angle's label and on the usage bars below. Everything is measured
+ * from a drawing area that already has that strip taken out.
+ */
 function drawSlipDiagram(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -201,9 +218,19 @@ function drawSlipDiagram(
   k: number,
   showNumbers: boolean
 ): void {
+  const captionH = showNumbers ? 11 * k : 0
   const cx = x + w / 2
-  const top = y + 8
-  const bottom = y + h - 8
+  const bottom = y + h - captionH - 4
+
+  // Both wedges open FORWARD from their axle -- that is the direction of
+  // travel, and drawing them any other way would be a lie about what a slip
+  // angle is. The front one therefore reaches ABOVE the front axle by its own
+  // radius, so the axle has to sit at least that far down or the wedge runs
+  // into the heading above. Radius first, then position.
+  const usable = bottom - y - 4
+  const radius = Math.max(10, Math.min(usable * 0.3, w * 0.26))
+  const top = y + radius + 2
+  if (bottom - top < 24) return
   const half = (bottom - top) / 2
   const midY = top + half
 
@@ -220,7 +247,7 @@ function drawSlipDiagram(
   ctx.lineTo(cx, bottom)
   ctx.stroke()
 
-  const axleHalf = Math.min(w * 0.16, 26)
+  const axleHalf = Math.min(w * 0.15, 24)
   for (const [ay, colour] of [
     [top, FRONT],
     [bottom, REAR]
@@ -234,29 +261,36 @@ function drawSlipDiagram(
   }
 
   // The shaded angles: from the car's centreline to where each axle is really
-  // travelling. The wider one is the end that is giving up.
-  const radius = Math.min(half * 0.85, w * 0.3)
+  // travelling. The wider one is the end that is giving up -- which is the one
+  // thing this picture exists to say.
   shadedAngle(ctx, cx, top, radius, 0, r.alphaFront * exaggeration, FRONT)
   shadedAngle(ctx, cx, bottom, radius, 0, r.alphaRear * exaggeration, REAR)
 
-  if (showNumbers) {
-    const deg = (a: number): string => `${Math.abs((a * 180) / Math.PI).toFixed(1)}°`
-    ctx.font = `${10 * k}px Inter, "Segoe UI", system-ui, sans-serif`
-    ctx.fillStyle = FRONT
-    ctx.textAlign = 'left'
-    ctx.fillText(deg(r.alphaFront), x + 2, top + 4)
-    ctx.fillStyle = REAR
-    ctx.fillText(deg(r.alphaRear), x + 2, bottom + 4)
+  if (!showNumbers) return
 
-    ctx.fillStyle = FAINT
-    ctx.textAlign = 'right'
-    ctx.fillText(`${r.ay.toFixed(2)} g`, x + w - 2, midY - 4)
-    ctx.fillText(`${Math.round(r.speed * 3.6)} km/h`, x + w - 2, midY + 9 * k)
-    ctx.textAlign = 'left'
-    ctx.fillStyle = FAINT
-    ctx.font = `${8.5 * k}px Inter, "Segoe UI", system-ui, sans-serif`
-    ctx.fillText(`angles ×${exaggeration.toFixed(1)}`, x + 2, bottom + 14 * k)
-  }
+  const deg = (a: number): string => `${Math.abs((a * 180) / Math.PI).toFixed(1)}°`
+  ctx.font = `600 ${10 * k}px Inter, "Segoe UI", system-ui, sans-serif`
+  ctx.textAlign = 'left'
+  // Beside each axle, vertically centred on it, so neither can reach the
+  // caption strip or the bars.
+  ctx.fillStyle = FRONT
+  ctx.fillText(deg(r.alphaFront), x + 2, top + 3.5 * k)
+  ctx.fillStyle = REAR
+  ctx.fillText(deg(r.alphaRear), x + 2, bottom + 3.5 * k)
+
+  ctx.font = `${10 * k}px Inter, "Segoe UI", system-ui, sans-serif`
+  ctx.fillStyle = FAINT
+  ctx.textAlign = 'right'
+  ctx.fillText(`${r.ay.toFixed(2)} g`, x + w - 2, midY - 3 * k)
+  ctx.fillText(`${Math.round(r.speed * 3.6)} km/h`, x + w - 2, midY + 9 * k)
+
+  // The caption, in its own strip. Always shown, because a diagram drawn at
+  // six times life size that does not say so is a lie.
+  ctx.textAlign = 'center'
+  ctx.font = `${8.5 * k}px Inter, "Segoe UI", system-ui, sans-serif`
+  ctx.fillStyle = FAINT
+  ctx.fillText(`angles drawn ×${exaggeration.toFixed(1)}`, cx, y + h - 1)
+  ctx.textAlign = 'left'
 }
 
 /** One axle's share of its own peak slip angle. */
