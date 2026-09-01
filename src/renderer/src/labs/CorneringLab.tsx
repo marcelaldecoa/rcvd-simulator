@@ -120,10 +120,10 @@ export function CorneringLab(): React.JSX.Element {
     {
       title: 'Why does a tyre need to slip at all?',
       action: 'Drag "How hard you are cornering" down to zero, then back up slowly.',
-      predict: 'What happens to the two shaded wedges, and to the force arrows?',
+      predict: 'What happens to the two shaded angles, and to the force arrows?',
       result: (
         <>
-          At zero cornering the wedges vanish and so do the force arrows. A tyre
+          At zero cornering the shaded angles vanish and so do the force arrows. A tyre
           makes lateral force <strong>only</strong> by running at a slip angle —
           by pointing slightly away from where it is actually travelling. More
           corner means more slip means more force, until the tyre runs out.
@@ -134,10 +134,10 @@ export function CorneringLab(): React.JSX.Element {
     {
       title: 'Make the car understeer',
       action: 'Give the rear more grip than the front — slide "Rear grip vs front" right.',
-      predict: 'Which wedge grows? Which end runs out of grip first?',
+      predict: 'Which shaded angle grows? Which end runs out of grip first?',
       result: (
         <>
-          The <strong>front</strong> wedge becomes the larger one. The front now
+          The <strong>front</strong> angle becomes the larger one. The front now
           needs more slip angle than the rear to hold the same corner, so you must
           add lock beyond the geometric angle — and that extra lock <em>is</em> the
           understeer. The front grip bar fills first, so at the limit the car runs
@@ -150,10 +150,10 @@ export function CorneringLab(): React.JSX.Element {
     {
       title: 'Make the car oversteer',
       action: 'Now take grip away from the rear instead.',
-      predict: 'Which wedge grows now? What happens to the steering angle?',
+      predict: 'Which shaded angle grows now? What happens to the steering angle?',
       result: (
         <>
-          The rear wedge overtakes the front. The car rotates more than you asked
+          The rear angle overtakes the front. The car rotates more than you asked
           for, so the steer angle needed <em>falls</em> — and if you push further
           it goes negative, which is opposite lock. The rear grip bar now saturates
           first, so the car spins rather than pushes. Notice nothing about the car
@@ -200,7 +200,7 @@ export function CorneringLab(): React.JSX.Element {
       <div className="lab-intro">
         A tyre generates lateral force <strong>only by slipping</strong> — by pointing
         slightly away from the direction it is actually travelling. Everything else in
-        vehicle dynamics is a consequence. Below, the shaded wedge at each axle{' '}
+        vehicle dynamics is a consequence. Below, the shaded angle at each axle{' '}
         <strong>is</strong> that slip angle.
       </div>
 
@@ -415,7 +415,7 @@ export function CorneringLab(): React.JSX.Element {
             }
             look={
               <>
-                Compare the two wedges. <strong>Front bigger than rear is
+                Compare the two shaded angles. <strong>Front bigger than rear is
                 understeer</strong>; rear bigger than front is oversteer. Then watch
                 the two grip bars beside the car: the one that fills first is the end
                 that gives up first.
@@ -425,7 +425,7 @@ export function CorneringLab(): React.JSX.Element {
               <>
                 Every setup change a race engineer makes — tyre sizes and pressures,
                 springs, anti-roll bars, wing angles — is an attempt to move those two
-                wedges relative to each other. Once you can see them, the rest of the
+                angles relative to each other. Once you can see them, the rest of the
                 subject is detail.
               </>
             }
@@ -434,7 +434,7 @@ export function CorneringLab(): React.JSX.Element {
             Slip angles on a real car are only a few degrees, which would be invisible
             at true scale. Every angle here is drawn <strong>×{exaggeration.toFixed(1)}</strong>.
             Because they are all multiplied by the same factor the construction stays
-            consistent — the wedges still add up exactly as the equations say.
+            consistent — the angles still add up exactly as the equations say.
           </div>
         </Panel>
       </div>

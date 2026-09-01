@@ -377,8 +377,15 @@ export function CarDiagram({
         <text x={44} y={59.5} fill="#8b9bad">
           lateral force from the tyres
         </text>
-        <text x={16} y={78} fill="#8b9bad">
-          the shaded wedge <tspan fill="#dbe4ee">is the slip angle</tspan>
+        {/* A miniature of the construction, so "the shaded angle" needs no
+            explaining: two rays with the angle between them filled in. */}
+        <g transform="translate(16 68)">
+          <path d="M 0 0 L 26 -9 L 26 0 Z" fill="#4dd6c1" fillOpacity={0.32} />
+          <path d="M 0 0 L 28 -10" stroke="#8b9bad" strokeWidth={1.4} strokeDasharray="4 3" />
+          <path d="M 0 0 L 28 0" stroke="#8b9bad" strokeWidth={2} />
+        </g>
+        <text x={52} y={71} fill="#dbe4ee">
+          the shaded angle between them <tspan fill="#8b9bad">= the slip angle</tspan>
         </text>
       </g>
 

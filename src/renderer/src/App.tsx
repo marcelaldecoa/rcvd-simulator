@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { CHAPTERS, PARTS, type Chapter } from './data/chapters'
 import { Notes } from './components/Notes'
 import { Exercises } from './components/Exercises'
+import { Glossary } from './components/Glossary'
+import { FormulaLab } from './labs/FormulaLab'
 import { CorneringLab } from './labs/CorneringLab'
 import { ConditionsLab } from './labs/ConditionsLab'
 import { TireLab } from './labs/TireLab'
@@ -30,6 +32,10 @@ function LabFor({ chapter }: { chapter: Chapter }): React.JSX.Element {
       return <PairAnalysisLab />
     case 'wheelLoads':
       return <WheelLoadsLab />
+    case 'glossary':
+      return <Glossary />
+    case 'formulas':
+      return <FormulaLab />
     default:
       return (
         <div className="empty">

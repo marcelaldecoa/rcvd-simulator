@@ -52,7 +52,7 @@ export function stiffnessFromTires(
 const DEFAULT_REAR_SCALE = 1.3
 /**
  * The app opens on a mildly understeering car rather than a neutral one.
- * A neutral car draws two identical slip-angle wedges, which is the least
+ * A neutral car draws two identical slip angles, which is the least
  * informative first impression the cornering diagram could give.
  */
 const DEFAULT_REAR_GRIP = 1.12

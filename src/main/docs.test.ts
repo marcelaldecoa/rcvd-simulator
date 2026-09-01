@@ -71,10 +71,14 @@ describe('docs directory resolution', () => {
 })
 
 describe('reading the real course notes', () => {
-  it('lists all 24 documents', async () => {
+  it('lists the overview, all 23 chapters and the glossary', async () => {
+    // Asserted by content rather than a count, so adding a document does not
+    // fail a test that was not about the new document.
     const files = await listDocs(DOCS)
-    expect(files).toHaveLength(24)
     expect(files[0]).toBe('00-course-overview.md')
+    expect(files).toContain('glossary.md')
+    expect(files.filter((f) => /^ch\d\d-/.test(f))).toHaveLength(23)
+    expect(files.every((f) => f.endsWith('.md'))).toBe(true)
   })
 
   it('returns an empty list rather than throwing on a missing folder', async () => {

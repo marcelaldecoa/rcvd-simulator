@@ -13,6 +13,8 @@ quantity move with it.
 |---|---|---|
 | **Start here — How a Car Corners** | ✅ | Top-down cornering diagram: the slip angle at each axle drawn as an actual wedge, a plain-language verdict, and five guided experiments |
 | **Start here — Changing Conditions** | ✅ | Fuel, wear, temperature, pressure and track grip applied to the car; A/B compare against a frozen baseline, a stint timeline, and a sensitivity ranking |
+| **The Formulas** | ✅ | 15 key equations, each rendered live, substituted with your numbers, decomposed into terms, and swept on a chart |
+| **Glossary · Glossário** | ✅ | 213 terms in English and Brazilian Portuguese, searchable in either language, accent-insensitive, flagging the terms Brazilian motorsport keeps in English |
 | **Exercises** (every chapter) | ✅ | The notes' ~140 exercises, one at a time, solutions withheld until asked for, progress remembered |
 | 2 — Tire Behavior | ✅ | **Contact-patch view** (adhesion vs sliding), Magic Formula and brush models, load sensitivity, axle capacity under load transfer, pneumatic trail collapse, friction ellipse |
 | 5 — Steady-State Stability and Control | ✅ | Understeer gradient and Bundorf compliances, constant-radius skid pad, response gains vs speed, significant speeds, stability derivatives, understeer budget |
@@ -171,6 +173,54 @@ size, pressure, temperature, wear) is a *primary* effect that bars cannot undo.
 Bars are a secondary trim around a car that is already roughly right. The lab
 says so, quantifies the gap, and has an experiment that equalises the tyres and
 shows the bars reaching neutral once they can.
+
+## The formulas, made playable
+
+The animations build intuition; this is where it lands as mathematics.
+Each of 15 equations is shown three ways at once —
+
+1. **the formula**, typeset;
+2. **the same formula with your numbers written in**, e.g.
+   `K = 3318/143564 − 3548/157500`;
+3. **the answer**.
+
+Then a chart sweeps one variable, so you see the *shape* of the relationship
+rather than a single point on it. Click any symbol to move it onto the x-axis.
+Where a formula is naturally a sum or a difference its terms are broken out,
+because "why is it this value" usually means "which term is winning" — the
+understeer gradient makes the point on its own: **K = 0.0335 is the difference
+of 1.3242 and 1.2907**, two large numbers nearly cancelling. That is why balance
+is delicate.
+
+A sensitivity bar answers the other question — of these variables, at *these*
+values, which one is actually driving the answer.
+
+**It cannot drift from the simulator.** Restating an equation in a playground
+creates a second implementation, so every formula that has a counterpart in the
+models is tested against it: the catalogue's understeer gradient must equal
+`summarise()`, its natural frequency must equal `modal()`, its load transfer
+must equal `totalLateralTransfer()`. If a model changes and the playground does
+not, the suite goes red rather than quietly teaching the wrong thing.
+
+## Glossary — English ⇄ Português (BR)
+
+[`docs/glossary.md`](docs/glossary.md) carries 213 terms across ten topic
+sections, with the book's symbols and short notes. The app parses that same
+file — the markdown stays the single source of truth — and puts search in front
+of it: type in either language, accents optional, so `angulo de deriva` and
+`slip angle` find the same row.
+
+Two things it does that a plain word list would not:
+
+- **Flags the terms Brazilian motorsport keeps in English.** *Setup*, *grip*,
+  *downforce*, *bump steer*, *stint* and about forty others are marked **EN**.
+  The Portuguese is given anyway, because that is what written engineering work
+  needs even when nobody says it in the paddock.
+- **Calls out the false friends.** *Slip angle* and *sideslip angle* both
+  collapse to "ângulo de deriva" if you are careless — the glossary keeps them
+  apart as *do pneu* (α) and *do veículo* (β). Likewise roll vs rolling, scrub
+  radius vs roll centre, spring **rate** vs installation **ratio**, and damper
+  "speed" which is the damper's, not the car's.
 
 ## The garage
 
