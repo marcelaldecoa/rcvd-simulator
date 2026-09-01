@@ -65,6 +65,10 @@ Symbols follow the book's notation. | Os símbolos seguem a notação do livro.
 | Relaxation length | Comprimento de relaxação | $\sigma_r$ | Distância para a força se estabelecer |
 | Adhesion / sliding zone | Zona de aderência / escorregamento | — | Regiões da área de contato |
 | Magic Formula | Fórmula Mágica | — | Normalmente mantida em inglês ⚑ |
+| Nondimensionalisation (Radt) | Adimensionalização (Radt) | — | Colapsa curvas de vários $F_z$ em uma só |
+| Master curve | Curva mestra | $\bar F(\bar\alpha)$ | A curva única que resulta do colapso |
+| Normalised slip angle | Ângulo de deriva normalizado | $\bar\alpha = C_\alpha\tan\alpha/\mu_yF_z$ | Quanto se pede do pneu, como fração do que ele tem |
+| Normalised force | Força normalizada | $\bar F_y = F_y/\mu_yF_z$ | Força sobre o pico naquela carga |
 | Brush model | Modelo de escova | — | Também "modelo de cerdas"; "Fiala" ⚑ |
 | Grip | Aderência | — | ⚑ usa-se em inglês |
 | Tread | Banda de rodagem | — | |
@@ -137,6 +141,14 @@ Symbols follow the book's notation. | Os símbolos seguem a notação do livro.
 | Natural frequency | Frequência natural | $\omega_n$ | rad/s ou Hz |
 | Damped frequency | Frequência amortecida | $\omega_d$ | |
 | Damping ratio | Fator de amortecimento | $\zeta$ | "Razão de amortecimento" |
+| Digressive damping | Amortecimento digressivo | — | Firme abaixo do joelho, mais plano acima |
+| Progressive damping | Amortecimento progressivo | — | O oposto; resiste a eventos de alta velocidade |
+| Blow-off valve | Válvula de alívio | — | ⚑ "blow-off"; limita o pico sobre zebras |
+| Knee (damper curve) | Joelho da curva | — | Velocidade onde a inclinação muda |
+| Jacking down | Afundamento progressivo | — | ⚑ "jacking down"; rebote lento demais entre ondulações |
+| Contact patch load variation | Variação de carga na área de contato | — | Objetivo real do amortecedor; medida em RMS |
+| 7-post rig | Bancada de 7 atuadores | — | ⚑ "7-post"; entradas nas rodas mais heave, pitch e roll |
+| Damper velocity histogram | Histograma de velocidade do amortecedor | — | Mostra que parte da curva importa naquele circuito |
 | Underdamped / overdamped | Subamortecido / superamortecido | — | |
 | Critically damped | Criticamente amortecido | $\zeta = 1$ | |
 | Overshoot | Sobressinal | — | ⚑ "overshoot" é comum |
@@ -193,6 +205,8 @@ Symbols follow the book's notation. | Os símbolos seguem a notação do livro.
 | Rebound / extension | Extensão / retorno | — | ⚑ "rebound" |
 | Low-speed / high-speed damping | Amortecimento de baixa / alta velocidade | — | Velocidade do amortecedor, não do carro |
 | Wheel hop | Salto da roda | — | Modo de 12–20 Hz; ⚑ "wheel hop" |
+| Heave spring / third element | Mola de heave / terceiro elemento | — | ⚑ "heave spring"; separa rigidez de heave da de rolagem |
+| Bump rubber / packer | Batente progressivo | — | ⚑ "bump rubber"; elemento de carga em alta velocidade |
 | Torsion bar | Barra de torção | — | |
 | Coil spring | Mola helicoidal | — | |
 | Leaf spring | Mola de lâminas (feixe de molas) | — | |

@@ -701,7 +701,7 @@ app.whenReady().then(async () => {
   record(
     'Ch 17 Exercise 17.1 geometry puts the roll centre BELOW ground',
     val(p2.geoEx['Roll centre']) < 0 && Math.abs(val(p2.geoEx['Roll centre']) + 165) < 3,
-    `${p2.geoEx['Roll centre']} — the notes report +438 mm from a frame mix-up`
+    `${p2.geoEx['Roll centre']} — a mixed frame would say +438 mm`
   )
   record(
     'Ch 17 reports the swing arm as outboard for that geometry',
@@ -762,6 +762,105 @@ app.whenReady().then(async () => {
       val(p2.compl['Setup change realized']) < 100 &&
       !p2.nan,
     `${p2.compl['Setup change realized']} of an intended TLLTD change survives`
+  )
+
+  // Chapters 14 and 22. The load-bearing check on Ch 14 is that the collapse can
+  // be BROKEN -- a demonstration that cannot fail is not a demonstration, and
+  // for a Magic Formula with load-independent shape factors the collapse is an
+  // algebraic identity rather than a finding about a tyre.
+  const late = await js(`(async () => {
+    const waitFor = async (test, ms = 20000) => {
+      const deadline = Date.now() + ms
+      while (Date.now() < deadline) {
+        try { if (test()) return true } catch { /* not ready */ }
+        await new Promise(r => setTimeout(r, 120))
+      }
+      return false
+    }
+    const read = () => Object.fromEntries([...document.querySelectorAll('.readout')].map(r => [
+      r.querySelector('.readout-label')?.textContent?.trim(),
+      r.querySelector('.readout-value')?.textContent?.trim()]))
+    const go = async (name, until) => {
+      const item = [...document.querySelectorAll('.nav-item')].find(e => e.textContent.includes(name))
+      if (!item) throw new Error('nav item missing: ' + name)
+      item.click()
+      await waitFor(until)
+      await new Promise(r => setTimeout(r, 350))
+    }
+    const setSlider = (label, value) => {
+      const f = [...document.querySelectorAll('.field')].find(x => x.textContent.includes(label))
+      if (!f) throw new Error('slider not found: ' + label)
+      const input = f.querySelector('input[type=range]')
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set.call(input, String(value))
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+
+    await go('Tire Data Treatment', () => read()['Mean spread between loads'])
+    const tidy = read()
+    setSlider('Shape drift with load', 0.4)
+    await new Promise(r => setTimeout(r, 500))
+    const broken = read()
+    setSlider('Shape drift with load', 0)
+    await new Promise(r => setTimeout(r, 300))
+    setSlider('Slip ratio', 0)
+    await new Promise(r => setTimeout(r, 400))
+    const pureLateral = read()
+    setSlider('Slip ratio', 0.15)
+    await new Promise(r => setTimeout(r, 400))
+    const combined = read()
+
+    await go('Dampers', () => read()['Damping ratio ζ'])
+    const damper = read()
+    setSlider('Rear damping, relative to front', 1.6)
+    await new Promise(r => setTimeout(r, 500))
+    const rearDamped = read()
+    setSlider('Rear damping, relative to front', 0.55)
+    await new Promise(r => setTimeout(r, 300))
+    setSlider('Low-speed rebound', 22000)
+    await new Promise(r => setTimeout(r, 500))
+    const jacking = read()
+    setSlider('Low-speed rebound', 9000)
+    await new Promise(r => setTimeout(r, 300))
+
+    return { tidy, broken, pureLateral, combined, damper, rearDamped, jacking,
+             nan: document.body.innerText.includes('NaN') }
+  })()`)
+
+  const lat = (v) => parseFloat(String(v ?? 'NaN'))
+  const L = late
+
+  record(
+    'Ch 14 collapses a five-load family onto one curve',
+    lat(L.tidy['Mean spread between loads']) < 1.0,
+    `${L.tidy['Mean spread between loads']} mean, ${L.tidy['Worst spread']} worst`
+  )
+  record(
+    'Ch 14 can BREAK the collapse when the tyre shape drifts with load',
+    lat(L.broken['Mean spread between loads']) > lat(L.tidy['Mean spread between loads']) * 5,
+    `${L.tidy['Mean spread between loads']} -> ${L.broken['Mean spread between loads']} with shape drift`
+  )
+  record(
+    'Ch 14 produces the friction ellipse from the master curve',
+    lat(L.combined['Lateral lost to the slip ratio']) >
+      lat(L.pureLateral['Lateral lost to the slip ratio'] ?? '0') &&
+      lat(L.combined['Normalised slip ᾱ']) > lat(L.pureLateral['Normalised slip ᾱ']),
+    `adding slip ratio costs ${L.combined['Lateral lost to the slip ratio']} of the lateral force`
+  )
+  record(
+    'Ch 22 separates the body and wheel-hop modes',
+    lat(L.damper['Wheel hop']) > lat(L.damper['Body mode']) * 3.5,
+    `${L.damper['Body mode']} body vs ${L.damper['Wheel hop']} hop`
+  )
+  record(
+    'Ch 22 moves TLLTD in the transient but not at steady state',
+    L.damper['Steady-state TLLTD'] === L.rearDamped['Steady-state TLLTD'] &&
+      L.damper['During turn-in'] !== L.rearDamped['During turn-in'],
+    `steady ${L.damper['Steady-state TLLTD']} unchanged; turn-in ${L.damper['During turn-in']} -> ${L.rearDamped['During turn-in']}`
+  )
+  record(
+    'Ch 22 flags jacking down when rebound is wound up',
+    L.damper['Jacking down'] === 'clear' && L.jacking['Jacking down'] === 'at risk' && !L.nan,
+    `rebound time constant ${L.damper['Rebound time constant']} -> ${L.jacking['Rebound time constant']}`
   )
 
   // Aerodynamics and the g-g envelope. The claim worth checking is that

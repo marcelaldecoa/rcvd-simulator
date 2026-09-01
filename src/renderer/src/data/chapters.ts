@@ -21,6 +21,8 @@ export type LabId =
   | 'steering'
   | 'driveline'
   | 'compliance'
+  | 'tireData'
+  | 'damper'
 
 export interface Chapter {
   /** Chapter number, or 0 for the course overview. */
@@ -165,7 +167,7 @@ export const CHAPTERS: Chapter[] = [
     title: 'Tire Data Treatment',
     file: 'ch14-tire-data-treatment.md',
     part: 'Part II — Applied Subsystems',
-    blurb: 'Radt nondimensionalisation collapsing a 9:1 load range onto one curve.'
+    lab: 'tireData'
   },
   {
     n: 15,
@@ -221,7 +223,7 @@ export const CHAPTERS: Chapter[] = [
     title: 'Dampers',
     file: 'ch22-dampers.md',
     part: 'Part II — Applied Subsystems',
-    blurb: 'Body and wheel-hop modes, IR² vs IR, contact-patch load variation.'
+    lab: 'damper'
   },
   {
     n: 23,

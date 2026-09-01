@@ -205,13 +205,15 @@ $$
 
 Master curve:
 $$
-\bar F_y = 0.7266 - \frac{0.7266^2}{3} + \frac{0.7266^3}{27} = 0.7266 - 0.1760 + 0.00142 = 0.5520
+\bar F_y = 0.7266 - \frac{0.7266^2}{3} + \frac{0.7266^3}{27} = 0.7266 - 0.1760 + 0.01421 = 0.5648
 $$
 $$
-F_y = \bar F_y \mu_yF_z = 0.5520 \times 6200 = 3423\ \text{N}
+F_y = \bar F_y \mu_yF_z = 0.5648 \times 6200 = 3502\ \text{N}
 $$
 
-Compare the pure linear estimate $C_\alpha\alpha = 4500$ N. The tire is 24% below linear at 3°, and has used 55% of its peak capability.
+(The third term is $0.7266^3/27 = 0.3836/27 = 0.01421$. It is small but not negligible; dropping a decimal place here costs about 80 N.)
+
+Compare the pure linear estimate $C_\alpha\alpha = 4500$ N. The tire is 22% below linear at 3°, and has used 56% of its peak capability.
 
 **14.2**
 Peak occurs at $\bar\alpha = 3$:
