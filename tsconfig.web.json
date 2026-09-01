@@ -21,6 +21,7 @@
   },
   "include": [
     "src/renderer/src/**/*",
+    "src/renderer/overlay/**/*",
     "src/core/**/*",
     "src/telemetry/**/*",
     "src/preload/*.d.ts"

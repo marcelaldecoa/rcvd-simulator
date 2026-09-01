@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+    />
+    <title>RCVD Overlay</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+        /* The window itself is click-through when locked; this keeps the page
+           from ever showing a text cursor or selection in the unlocked case. */
+        user-select: none;
+        -webkit-user-select: none;
+        font-family: 'Inter', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+      }
+      #canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      /* The whole surface is a drag handle when unlocked, so the driver can
+         move the box without hunting for a title bar that does not exist. */
+      body.unlocked {
+        -webkit-app-region: drag;
+        cursor: move;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="canvas"></canvas>
+    <script type="module" src="./overlay/main.ts"></script>
+  </body>
+</html>

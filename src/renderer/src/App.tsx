@@ -20,6 +20,7 @@ import { DrivelineLab } from './labs/DrivelineLab'
 import { ComplianceLab } from './labs/ComplianceLab'
 import { TireDataLab } from './labs/TireDataLab'
 import { DamperLab } from './labs/DamperLab'
+import { TelemetryLab } from './labs/TelemetryLab'
 import { WheelLoadsLab } from './labs/WheelLoadsLab'
 import { useGarage } from './store/garage'
 import { summarise } from '@core/vehicle/steadyState.js'
@@ -56,6 +57,8 @@ function LabFor({ chapter }: { chapter: Chapter }): React.JSX.Element {
       return <TireDataLab />
     case 'damper':
       return <DamperLab />
+    case 'telemetry':
+      return <TelemetryLab />
     case 'wheelLoads':
       return <WheelLoadsLab />
     case 'glossary':
