@@ -18,6 +18,8 @@ import { scaleTire, scaleTireGrip } from '@core/tire/scale.js'
 import { FORMULA_CAR, derive, type BicycleVehicle } from '@core/vehicle/params.js'
 import type { FuelTank } from '@core/conditions/index.js'
 import { FORMULA_CHASSIS, type ChassisParams } from '@core/vehicle/chassis.js'
+import { HIGH_DOWNFORCE, type AeroParams } from '@core/aero/index.js'
+import { DEFAULT_POWERTRAIN, type PowertrainParams } from '@core/performance/gg.js'
 
 export type UnitSystem = 'SI' | 'Imperial'
 
@@ -82,6 +84,10 @@ interface GarageState {
   tank: FuelTank
   /** Suspension and mass geometry -- Ch 18. */
   chassis: ChassisParams
+  /** Aerodynamics -- Ch 3 and 15. */
+  aero: AeroParams
+  /** Engine and braking, for the g-g envelope -- Ch 9. */
+  powertrain: PowertrainParams
   units: UnitSystem
 
   setVehicle: (patch: Partial<BicycleVehicle>) => void
@@ -92,6 +98,8 @@ interface GarageState {
   setSpeed: (v: number) => void
   setTank: (t: Partial<FuelTank>) => void
   setChassis: (c: Partial<ChassisParams>) => void
+  setAero: (a: Partial<AeroParams>) => void
+  setPowertrain: (p: Partial<PowertrainParams>) => void
   setUnits: (u: UnitSystem) => void
   /**
    * Overwrite the axle cornering stiffnesses with the values the current tire
@@ -113,6 +121,8 @@ export const useGarage = create<GarageState>((set, get) => ({
   // aft of the CG, so burning fuel moves the balance forward.
   tank: { capacity: 60, position: 1.9 },
   chassis: { ...FORMULA_CHASSIS },
+  aero: { ...HIGH_DOWNFORCE },
+  powertrain: { ...DEFAULT_POWERTRAIN },
   units: 'SI',
 
   setVehicle: (patch) => set((s) => ({ vehicle: { ...s.vehicle, ...patch } })),
@@ -123,6 +133,8 @@ export const useGarage = create<GarageState>((set, get) => ({
   setSpeed: (speed) => set({ speed }),
   setTank: (t) => set((s) => ({ tank: { ...s.tank, ...t } })),
   setChassis: (c) => set((s) => ({ chassis: { ...s.chassis, ...c } })),
+  setAero: (a) => set((s) => ({ aero: { ...s.aero, ...a } })),
+  setPowertrain: (p) => set((s) => ({ powertrain: { ...s.powertrain, ...p } })),
   setUnits: (units) => set({ units }),
 
   syncStiffnessFromTire: () => {

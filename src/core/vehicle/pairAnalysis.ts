@@ -21,6 +21,14 @@
 import { G, bisect, goldenMax, toRad } from '../util/numeric.js'
 import { derive, type BicycleVehicle } from './params.js'
 import { wheelLoads, type ChassisParams, type WheelLoads } from './chassis.js'
+
+/** Extra vertical load per axle, e.g. aerodynamic download. */
+export interface ExtraLoads {
+  front: number
+  rear: number
+}
+
+const NO_EXTRA: ExtraLoads = { front: 0, rear: 0 }
 import type { TireModel } from '../tire/types.js'
 
 const MAX_ALPHA = toRad(25)
@@ -108,10 +116,11 @@ export function pairState(
   tireRear: TireModel,
   ay: number,
   radius = Infinity,
-  ax = 0
+  ax = 0,
+  aero: ExtraLoads = NO_EXTRA
 ): PairState {
   const { L, wf, wr } = derive(v)
-  const loads = wheelLoads(v, c, ay, ax)
+  const loads = wheelLoads(v, c, ay, ax, aero)
 
   // Moment balance still demands each axle carry its share of the lateral
   // force in proportion to the STATIC axle loads.
@@ -189,22 +198,49 @@ export function pairLimit(
   c: ChassisParams,
   tireFront: TireModel,
   tireRear: TireModel,
-  ax = 0
+  ax = 0,
+  aero: ExtraLoads = NO_EXTRA,
+  /**
+   * Fraction of each axle's lateral capacity still available after that axle
+   * has spent part of its friction budget longitudinally (Ch 2 §6).
+   *
+   * Per-axle rather than global, because the two directions load the axles
+   * differently: under power only the DRIVEN axle pays for traction, while
+   * under braking all four wheels contribute. That asymmetry is what makes the
+   * accelerating quadrants of the g-g diagram smaller than the braking ones.
+   */
+  lateralFactor: ExtraLoads = { front: 1, rear: 1 }
 ): PairLimit {
   const { wf, wr } = derive(v)
 
+  // Demand is set by the car's WEIGHT; capacity is set by the vertical LOAD,
+  // which downforce raises without adding any mass to accelerate. That
+  // asymmetry is the whole reason a wing works.
   const marginFront = (ay: number): number => {
-    const l = wheelLoads(v, c, ay, ax)
-    return axlePeakForce(tireFront, l.fo, l.fi) / wf - ay
+    const l = wheelLoads(v, c, ay, ax, aero)
+    return (axlePeakForce(tireFront, l.fo, l.fi) * lateralFactor.front) / wf - ay
   }
   const marginRear = (ay: number): number => {
-    const l = wheelLoads(v, c, ay, ax)
-    return axlePeakForce(tireRear, l.ro, l.ri) / wr - ay
+    const l = wheelLoads(v, c, ay, ax, aero)
+    return (axlePeakForce(tireRear, l.ro, l.ri) * lateralFactor.rear) / wr - ay
   }
 
-  // Both margins are positive at Ay = 0 and fall monotonically, so a single
-  // bracketed root each. 6 g is far beyond any car this model describes.
-  const solve = (f: (ay: number) => number): number => bisect(f, 0, 6, 1e-9) ?? 0
+  /**
+   * Each margin is positive at Ay = 0 and falls monotonically, so there is a
+   * single root -- but the bracket has to CONTAIN it.
+   *
+   * A fixed ceiling is a trap here. A high-downforce car at speed genuinely
+   * exceeds 6 g, and with a fixed bracket the root falls outside it, the
+   * bisection reports failure, and a `?? 0` fallback turns "could not solve"
+   * into "no grip at all" -- a wrong answer that looks entirely plausible on a
+   * chart. So the bracket grows until it actually straddles the root, and the
+   * fallback is the ceiling reached rather than zero.
+   */
+  const solve = (f: (ay: number) => number): number => {
+    let hi = 4
+    while (f(hi) > 0 && hi < 64) hi *= 2
+    return bisect(f, 0, hi, 1e-9) ?? hi
+  }
 
   const limitAyFront = solve(marginFront)
   const limitAyRear = solve(marginRear)
@@ -237,13 +273,14 @@ export function pairSweep(
   tireRear: TireModel,
   radius: number,
   n = 50,
-  ax = 0
+  ax = 0,
+  aero: ExtraLoads = NO_EXTRA
 ): PairSweepPoint[] {
-  const limit = pairLimit(v, c, tireFront, tireRear, ax)
+  const limit = pairLimit(v, c, tireFront, tireRear, ax, aero)
   const out: PairSweepPoint[] = []
   for (let i = 0; i <= n; i++) {
     const ay = (limit.limitAy * 0.999 * i) / n
-    out.push({ ...pairState(v, c, tireFront, tireRear, ay, radius, ax), localK: 0 })
+    out.push({ ...pairState(v, c, tireFront, tireRear, ay, radius, ax, aero), localK: 0 })
   }
   for (let i = 0; i < out.length; i++) {
     const lo = out[Math.max(i - 1, 0)]
@@ -269,7 +306,8 @@ export function tlltdSweep(
   c: ChassisParams,
   tireFront: TireModel,
   tireRear: TireModel,
-  n = 30
+  n = 30,
+  aero: ExtraLoads = NO_EXTRA
 ): { tlltd: number; limit: PairLimit; barFront: number }[] {
   const totalBar = c.barRollStiffnessFront + c.barRollStiffnessRear
   const out: { tlltd: number; limit: PairLimit; barFront: number }[] = []
@@ -284,7 +322,7 @@ export function tlltdSweep(
     const share = loads.transfer.front + loads.transfer.rear
     out.push({
       tlltd: share > 0 ? loads.transfer.front / share : 0.5,
-      limit: pairLimit(v, trial, tireFront, tireRear),
+      limit: pairLimit(v, trial, tireFront, tireRear, 0, aero),
       barFront
     })
   }

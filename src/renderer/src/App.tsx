@@ -4,6 +4,8 @@ import { Notes } from './components/Notes'
 import { Exercises } from './components/Exercises'
 import { Glossary } from './components/Glossary'
 import { FormulaLab } from './labs/FormulaLab'
+import { AeroLab } from './labs/AeroLab'
+import { GGLab } from './labs/GGLab'
 import { CorneringLab } from './labs/CorneringLab'
 import { ConditionsLab } from './labs/ConditionsLab'
 import { TireLab } from './labs/TireLab'
@@ -36,6 +38,10 @@ function LabFor({ chapter }: { chapter: Chapter }): React.JSX.Element {
       return <Glossary />
     case 'formulas':
       return <FormulaLab />
+    case 'aero':
+      return <AeroLab />
+    case 'gg':
+      return <GGLab />
     default:
       return (
         <div className="empty">

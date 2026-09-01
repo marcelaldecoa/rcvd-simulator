@@ -18,6 +18,8 @@ quantity move with it.
 | **Exercises** (every chapter) | ✅ | The notes' ~140 exercises, one at a time, solutions withheld until asked for, progress remembered |
 | 2 — Tire Behavior | ✅ | **Contact-patch view** (adhesion vs sliding), Magic Formula and brush models, load sensitivity, axle capacity under load transfer, pneumatic trail collapse, friction ellipse |
 | 5 — Steady-State Stability and Control | ✅ | Understeer gradient and Bundorf compliances, constant-radius skid pad, response gains vs speed, significant speeds, stability derivatives, understeer budget |
+| **3 / 15 — Aerodynamics** | ✅ | Downforce and drag vs speed, altitude correction, aero balance, and the cornering limit becoming speed-dependent |
+| **9 — The g-g Diagram** | ✅ | The solved performance envelope, the g-g-V surface, and capability-versus-usage with the Ch 9 §4 driving-style patterns |
 | **7 — Steady-State Pair Analysis** | ✅ | Axle characteristics at real wheel loads, TLLTD sweep, corner-phase (braking/mid/power), and what load transfer costs |
 | 6 — Transient Stability and Control | ✅ | **Animated step-steer path** (heading vs course), step response, modal parameters vs speed, root locus, frequency response |
 | **18 — Wheel Loads** | ✅ | Four-corner load diagram, the three-way transfer split (geometric/elastic/unsprung), TLLTD, roll gradient, longitudinal transfer |
@@ -121,6 +123,44 @@ Conditions are evaluated through **Ch 7 pair analysis** with real wheel loads,
 so mass now costs lateral grip properly — roughly twice what it did before load
 transfer existed, because heavier means more transfer and the capacity loss goes
 as its square.
+
+## Aerodynamics — Ch 3 and 15
+
+The change that reorganises everything else: **grip stops being a property of
+the car and becomes a property of the car at a speed.** Downforce adds vertical
+load without adding mass, so capacity rises while demand does not, and the
+cornering limit climbs with V².
+
+The integration point is deliberately narrow — the aero module turns speed into
+an extra vertical load per axle, and `wheelLoads` accepts it. Pair analysis,
+limits, balance and the conditions model then all become speed-dependent without
+knowing anything about aerodynamics.
+
+Ch 3's worked exercises are reproduced: standard and altitude air density,
+dynamic pressure, Exercise 3.5's 105.4 m/s corner, and Exercise 3.6's coastdown
+fit of C_D A = 2.39 m².
+
+**The singularity is an artefact, and the app shows why.** Exercise 3.5's closed
+form assumes one fixed μ, so past a critical C_L A its denominator turns
+negative and the answer runs away to infinity. Real tyres are load-sensitive:
+each extra newton of download buys less grip than the last. The simulator
+therefore always returns a finite, diminishing-return answer, and reads *below*
+the closed form. The lab puts both numbers side by side.
+
+## The g-g diagram — Ch 9
+
+The envelope is **solved, not drawn**. Every boundary point comes from pair
+analysis at that longitudinal state, with downforce at that speed, so the four
+departures from a circle Ch 9 §2 lists appear on their own rather than being
+sketched in: braking beats acceleration, acceleration crosses from
+traction-limited to power-limited, the accelerating quadrants are narrower
+because only the driven axle pays for traction, and the whole envelope grows
+with speed.
+
+The usage overlay generates the Ch 9 §4 patterns so they can be recognised
+rather than described — the amateur "notch" between braking and cornering scores
+9% of the envelope where a blended lap scores 70%+. The traces are synthesised
+and labelled as such; the same overlay takes real telemetry unchanged.
 
 ## Load transfer — Ch 18 and Ch 7
 

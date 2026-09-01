@@ -22,6 +22,15 @@ const record = (name, pass, detail = '') => {
 
 const settle = (ms) => new Promise((r) => setTimeout(r, ms))
 
+// A watchdog. Without it, any throw inside an injected script leaves the
+// Electron window open and the process alive with NO OUTPUT AT ALL, which
+// turns a test failure into a hung job that is hard to diagnose.
+const WATCHDOG_MS = 180_000
+const watchdog = setTimeout(() => {
+  console.log('FAIL  smoke run exceeded ' + WATCHDOG_MS / 1000 + 's - aborting')
+  app.exit(1)
+}, WATCHDOG_MS)
+
 app.whenReady().then(async () => {
   await settle(300)
   const win = BrowserWindow.getAllWindows()[0]
@@ -201,7 +210,16 @@ app.whenReady().then(async () => {
   const cond = await js(`(async () => {
     const item = [...document.querySelectorAll('.nav-item')].find(e => e.textContent.includes('Changing Conditions'))
     item.click()
-    await new Promise(r => setTimeout(r, 1400))
+    const waitFor = async (test, ms = 8000) => {
+      const deadline = Date.now() + ms
+      while (Date.now() < deadline) {
+        try { if (test()) return true } catch { /* not ready */ }
+        await new Promise(r => setTimeout(r, 100))
+      }
+      return false
+    }
+    await waitFor(() => document.querySelectorAll('.readout').length > 3)
+    await new Promise(r => setTimeout(r, 300))
     const read = () => Object.fromEntries([...document.querySelectorAll('.readout')].map(r => [
       r.querySelector('.readout-label')?.textContent?.trim(),
       r.querySelector('.readout-value')?.textContent?.trim()]))
@@ -216,11 +234,15 @@ app.whenReady().then(async () => {
     }
     await press('Optimum')
     await press('What matters')
-    const rank = () => [...document.querySelectorAll('.tornado-row')].map(r => r.querySelector('.tornado-label').textContent.trim())
+    await waitFor(() => document.querySelectorAll('.tornado-row').length > 4)
+    const rank = () => [...document.querySelectorAll('.tornado-row')]
+      .map(r => r.querySelector('.tornado-label')?.textContent?.trim() ?? '')
     const balanceTop = rank()[0]
     await press('Outright grip')
+    await new Promise(r => setTimeout(r, 400))
     const gripTop = rank()[0]
     await press('Stint')
+    await waitFor(() => document.querySelectorAll('.chart-svg path[stroke]').length > 3)
     const stintCurves = document.querySelectorAll('.chart-svg path[stroke]').length
     return { out, balanceTop, gripTop, stintCurves, nan: document.body.innerText.includes('NaN') }
   })()`)
@@ -287,13 +309,25 @@ app.whenReady().then(async () => {
   const pa = await js(`(async () => {
     const item = [...document.querySelectorAll('.nav-item')].find(e => e.textContent.includes('Pair Analysis'))
     item.click()
-    await new Promise(r => setTimeout(r, 1600))
+    const waitFor = async (test, ms = 8000) => {
+      const deadline = Date.now() + ms
+      while (Date.now() < deadline) {
+        try { if (test()) return true } catch { /* not ready */ }
+        await new Promise(r => setTimeout(r, 100))
+      }
+      return false
+    }
+    await waitFor(() =>
+      [...document.querySelectorAll('.field')].some(f => f.textContent.includes('Front anti-roll bar'))
+    )
+    await new Promise(r => setTimeout(r, 300))
     const read = () => Object.fromEntries([...document.querySelectorAll('.readout')].map(r => [
       r.querySelector('.readout-label')?.textContent?.trim(),
       r.querySelector('.readout-value')?.textContent?.trim()]))
     const setSlider = (label, value) => {
-      const field = [...document.querySelectorAll('.field')].find(f => f.textContent.includes(label))
-      const input = field.querySelector('input[type=range]')
+      const found = [...document.querySelectorAll('.field')].find(f => f.textContent.includes(label))
+      if (!found) throw new Error('slider not found: ' + label)
+      const input = found.querySelector('input[type=range]')
       Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set.call(input, String(value))
       input.dispatchEvent(new Event('input', { bubbles: true }))
     }
@@ -343,6 +377,78 @@ app.whenReady().then(async () => {
   )
   record('Ch 7 experiments listed', pa.experiments === 5, `${pa.experiments} experiments`)
 
+  // Aerodynamics and the g-g envelope. The claim worth checking is that
+  // downforce actually reaches the vehicle model rather than sitting in its own
+  // corner of the app.
+  const aero = await js(`(async () => {
+    const item = [...document.querySelectorAll('.nav-item')].find(e => e.textContent.includes('Aerodynamic Fundamentals'))
+    item.click()
+    const deadline = Date.now() + 6000
+    while (Date.now() < deadline) {
+      if (document.querySelectorAll('.chart-svg path[stroke]').length > 3) break
+      await new Promise(r => setTimeout(r, 100))
+    }
+    await new Promise(r => setTimeout(r, 400))
+    const read = () => Object.fromEntries([...document.querySelectorAll('.readout')].map(r => [
+      r.querySelector('.readout-label')?.textContent?.trim(),
+      r.querySelector('.readout-value')?.textContent?.trim()]))
+    return { readouts: read(), curves: document.querySelectorAll('.chart-svg path[stroke]').length,
+             nan: document.body.innerText.includes('NaN') }
+  })()`)
+  record(
+    'Ch 3 aero lab reports downforce and drag',
+    parseFloat(aero.readouts['Downforce'] ?? '0') > 0 &&
+      parseFloat(aero.readouts['Drag'] ?? '0') > 0 && !aero.nan,
+    `${aero.readouts['Downforce']} down, ${aero.readouts['Drag']} drag`
+  )
+  record(
+    'aero buys real cornering speed',
+    parseFloat(aero.readouts['With this aero'] ?? '0') >
+      parseFloat(aero.readouts['Without wings'] ?? '0'),
+    `${aero.readouts['Without wings']} -> ${aero.readouts['With this aero']} (${aero.readouts['Gain']})`
+  )
+  record(
+    'load-sensitive model reads below the constant-mu closed form',
+    parseFloat(aero.readouts['With this aero'] ?? '0') <
+      parseFloat(aero.readouts['Closed form, constant μ'] ?? '0'),
+    `${aero.readouts['With this aero']} vs closed form ${aero.readouts['Closed form, constant μ']}`
+  )
+
+  const gg = await js(`(async () => {
+    const item = [...document.querySelectorAll('.nav-item')].find(e => e.textContent.includes('g-g Diagram'))
+    item.click()
+    const deadline = Date.now() + 8000
+    while (Date.now() < deadline) {
+      if (document.querySelectorAll('.chart-svg path[stroke]').length > 3) break
+      await new Promise(r => setTimeout(r, 100))
+    }
+    await new Promise(r => setTimeout(r, 500))
+    const read = () => Object.fromEntries([...document.querySelectorAll('.readout')].map(r => [
+      r.querySelector('.readout-label')?.textContent?.trim(),
+      r.querySelector('.readout-value')?.textContent?.trim()]))
+    const usage = {}
+    for (const label of ['Blends everything', 'Brakes straight, then turns', 'Never at the limit']) {
+      ;[...document.querySelectorAll('.btn')].find(b => b.textContent.trim() === label)?.click()
+      await new Promise(r => setTimeout(r, 700))
+      usage[label] = parseFloat(read()['Envelope used'] ?? '0')
+    }
+    return { readouts: read(), usage, dots: document.querySelectorAll('.chart-svg circle').length,
+             nan: document.body.innerText.includes('NaN') }
+  })()`)
+  record(
+    'g-g envelope brakes harder than it accelerates',
+    Math.abs(parseFloat(gg.readouts['Peak braking'] ?? '0')) >
+      parseFloat(gg.readouts['Peak acceleration'] ?? '0') && !gg.nan,
+    `${gg.readouts['Peak braking']} braking vs ${gg.readouts['Peak acceleration']} power`
+  )
+  record(
+    'g-g usage overlay ranks driving styles correctly',
+    gg.usage['Blends everything'] > gg.usage['Brakes straight, then turns'] &&
+      gg.usage['Brakes straight, then turns'] > gg.usage['Never at the limit'],
+    `blend ${gg.usage['Blends everything']}% > notch ${gg.usage['Brakes straight, then turns']}% > timid ${gg.usage['Never at the limit']}%`
+  )
+  record('g-g plots the usage scatter', gg.dots > 100, `${gg.dots} samples plotted`)
+
   // Formula playground: equation, substitution, answer and sweep must all move
   // together, and the sweep must actually change when a symbol is clicked.
   const formulas = await js(`(async () => {
@@ -382,7 +488,7 @@ app.whenReady().then(async () => {
     const omega = await pick('Yaw natural frequency')
     return { count, understeer, axisBefore, axisAfter, moved, omega, nan: document.body.innerText.includes('NaN') }
   })()`)
-  record('formula catalogue listed', formulas.count >= 14, `${formulas.count} formulas`)
+  record('formula catalogue listed', formulas.count >= 17, `${formulas.count} formulas`)
   record(
     'formula substitutes your numbers into the equation',
     formulas.understeer.substituted.includes('3318') &&
@@ -493,7 +599,15 @@ app.whenReady().then(async () => {
 
   record('no console errors', consoleErrors.length === 0, consoleErrors.slice(0, 3).join(' | '))
 
+  clearTimeout(watchdog)
   const failed = checks.filter((c) => !c.pass).length
   console.log(`\n${checks.length - failed}/${checks.length} checks passed`)
   app.exit(failed === 0 ? 0 : 1)
+}).catch((err) => {
+  // Report and exit rather than hang: an unhandled rejection inside an
+  // injected script used to leave the process alive producing nothing at all.
+  clearTimeout(watchdog)
+  console.log('FAIL  smoke run threw: ' + (err?.stack ?? err))
+  console.log(checks.filter((c) => c.pass).length + '/' + checks.length + ' checks passed before the error')
+  app.exit(1)
 })

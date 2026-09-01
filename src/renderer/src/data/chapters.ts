@@ -13,6 +13,8 @@ export type LabId =
   | 'wheelLoads'
   | 'glossary'
   | 'formulas'
+  | 'aero'
+  | 'gg'
 
 export interface Chapter {
   /** Chapter number, or 0 for the course overview. */
@@ -79,7 +81,7 @@ export const CHAPTERS: Chapter[] = [
     title: 'Aerodynamic Fundamentals',
     file: 'ch03-aerodynamic-fundamentals.md',
     part: 'Part I — Fundamentals',
-    blurb: 'Dynamic pressure, coefficients, altitude correction.'
+    lab: 'aero'
   },
   {
     n: 4,
@@ -121,7 +123,7 @@ export const CHAPTERS: Chapter[] = [
     title: 'The g-g Diagram',
     file: 'ch09-gg-diagram.md',
     part: 'Part I — Fundamentals',
-    blurb: 'The performance envelope, and capability versus driver usage.'
+    lab: 'gg'
   },
   {
     n: 10,
@@ -164,7 +166,7 @@ export const CHAPTERS: Chapter[] = [
     title: 'Applied Aerodynamics',
     file: 'ch15-applied-aerodynamics.md',
     part: 'Part II — Applied Subsystems',
-    blurb: 'Wings, ground effect, diffusers, and aero balance.'
+    lab: 'aero'
   },
   {
     n: 16,
