@@ -377,6 +377,191 @@ app.whenReady().then(async () => {
   )
   record('Ch 7 experiments listed', pa.experiments === 5, `${pa.experiments} experiments`)
 
+  // Ch 5: the understeer budget, whose five non-trivial rows come from Ch 2, 17,
+  // 19 and 23. The checks are that every row is actually populated, that the
+  // total differs materially from what Ch 5 can compute alone, and that the two
+  // aligning-torque rows shrink toward the limit as pneumatic trail collapses.
+  const bud = await js(`(async () => {
+    const item = [...document.querySelectorAll('.nav-item')].find(e => e.textContent.includes('Steady-State Stability'))
+    item.click()
+    const waitFor = async (test, ms = 15000) => {
+      const deadline = Date.now() + ms
+      while (Date.now() < deadline) {
+        try { if (test()) return true } catch { /* not ready */ }
+        await new Promise(r => setTimeout(r, 120))
+      }
+      return false
+    }
+    const panel = () => [...document.querySelectorAll('.panel')].find(p => p.textContent.includes('Understeer budget'))
+    await waitFor(() => panel() && panel().querySelector('table.data'))
+    await new Promise(r => setTimeout(r, 300))
+    const rows = () => [...panel().querySelectorAll('table.data tbody tr')].map(r =>
+      [...r.children].map(c => c.textContent.trim()))
+    const preset = (name) => {
+      const b = [...panel().querySelectorAll('.btn')].find(x => x.textContent.trim() === name)
+      b.click()
+    }
+    const setAy = (v) => {
+      const f = [...panel().querySelectorAll('.field')].find(x => x.textContent.includes('Evaluate the budget at'))
+      const input = f.querySelector('input[type=range]')
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set.call(input, String(v))
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+
+    preset('Road car')
+    await new Promise(r => setTimeout(r, 400))
+    const road = rows()
+    setAy(1.5)
+    await new Promise(r => setTimeout(r, 400))
+    const atLimit = rows()
+    setAy(0.5)
+    preset('Ideal')
+    await new Promise(r => setTimeout(r, 400))
+    const ideal = rows()
+    preset('Race car')
+    await new Promise(r => setTimeout(r, 400))
+    const race = rows()
+
+    return { road, atLimit, ideal, race, nan: document.body.innerText.includes('NaN') }
+  })()`)
+  const bRow = (t, i) => t[i]
+  const bK = (t) => parseFloat(t[7][1])
+  record(
+    'Ch 5 budget populates all six mechanisms',
+    bud.road.length === 8 &&
+      bud.road.slice(0, 6).every((r) => parseFloat(r[1]) !== 0 || parseFloat(r[2]) !== 0),
+    bud.road.slice(0, 6).map((r) => r[0].split(' ')[0] + ' ' + r[1]).join(', ')
+  )
+  record(
+    'Ch 5 budget names the chapter each row comes from',
+    bud.road.slice(0, 6).map((r) => r[4]).join(',') === 'Ch 5,Ch 2,Ch 17,Ch 19,Ch 23,Ch 23',
+    bud.road.slice(0, 6).map((r) => r[4]).join(' ')
+  )
+  // A perfect SUSPENSION empties rows 3-6. It does not empty row 2: the tyre's
+  // own pneumatic trail is physics, not a bushing, and no amount of stiffness
+  // designs it out. So the ideal car's K is the basic row plus the Ch 2 row,
+  // exactly, and nothing else.
+  record(
+    'Ch 5 ideal suspension empties the four compliance rows but not the tyre row',
+    bud.ideal.slice(2, 6).every((r) => Math.abs(parseFloat(r[1])) < 1e-9 && Math.abs(parseFloat(r[2])) < 1e-9) &&
+      Math.abs(parseFloat(bRow(bud.ideal, 1)[1])) > 1e-4,
+    `rows 3-6 zero, Ch 2 row ${bud.ideal[1][1]}/${bud.ideal[1][2]}`
+  )
+  record(
+    'Ch 5 ideal K is the basic row plus the aligning-torque row, exactly',
+    Math.abs(
+      bK(bud.ideal) -
+        (parseFloat(bRow(bud.ideal, 0)[1]) -
+          parseFloat(bRow(bud.ideal, 0)[2]) +
+          parseFloat(bRow(bud.ideal, 1)[1]) -
+          parseFloat(bRow(bud.ideal, 1)[2]))
+    ) < 0.002,
+    `K ${bud.ideal[7][1]} = ${bud.ideal[0][1]}-${bud.ideal[0][2]} + ${bud.ideal[1][1]}-${bud.ideal[1][2]}`
+  )
+  record(
+    'Ch 5 compliance changes the character of the car, not just the number',
+    bK(bud.road) > bK(bud.race) && bK(bud.race) > bK(bud.ideal),
+    `ideal ${bud.ideal[7][1]} < race ${bud.race[7][1]} < road ${bud.road[7][1]}`
+  )
+  record(
+    'Ch 5 aligning-torque rows fade toward the limit as trail collapses',
+    parseFloat(bRow(bud.atLimit, 1)[1]) < parseFloat(bRow(bud.road, 1)[1]) &&
+      parseFloat(bRow(bud.atLimit, 5)[1]) < parseFloat(bRow(bud.road, 5)[1]) &&
+      bK(bud.atLimit) < bK(bud.road) &&
+      !bud.nan,
+    `Mz rows ${bud.road[1][1]}/${bud.road[5][1]} -> ${bud.atLimit[1][1]}/${bud.atLimit[5][1]}`
+  )
+
+  // Ch 8: the Moment Method. The load-bearing check is the cross-chapter one --
+  // the N = 0 line must reproduce the Ch 7 pair-analysis limit, live in the app
+  // and not just in a unit test. The rest checks that the decomposition into
+  // stability and control actually responds to a setup change.
+  const mmm = await js(`(async () => {
+    const item = [...document.querySelectorAll('.nav-item')].find(e => e.textContent.includes('Force-Moment'))
+    item.click()
+    const waitFor = async (test, ms = 20000) => {
+      const deadline = Date.now() + ms
+      while (Date.now() < deadline) {
+        try { if (test()) return true } catch { /* not ready */ }
+        await new Promise(r => setTimeout(r, 150))
+      }
+      return false
+    }
+    const read = () => Object.fromEntries([...document.querySelectorAll('.readout')].map(r => [
+      r.querySelector('.readout-label')?.textContent?.trim(),
+      r.querySelector('.readout-value')?.textContent?.trim()]))
+    await waitFor(() => read()['Trimmed limit (Ch 8)'] !== undefined)
+    await new Promise(r => setTimeout(r, 400))
+    const base = read()
+
+    // Drive the terminal-oversteer experiment and re-read.
+    const head = [...document.querySelectorAll('.try-head')].find(b => b.textContent.includes('terminal oversteer'))
+    head.click()
+    await new Promise(r => setTimeout(r, 200))
+    const setup = [...document.querySelectorAll('.try-body .btn')].find(b => b.textContent.includes('Set it up'))
+    setup.click()
+    await waitFor(() => read()['Stability ∂N/∂Ay'] !== base['Stability ∂N/∂Ay'])
+    await new Promise(r => setTimeout(r, 400))
+    const loose = read()
+    const undo = [...document.querySelectorAll('.try-body .btn')].find(b => b.textContent.trim() === 'Undo')
+    if (undo) undo.click()
+    await new Promise(r => setTimeout(r, 800))
+
+    return {
+      base,
+      loose,
+      contours: document.querySelectorAll('.chart-svg polyline').length,
+      trimDots: document.querySelectorAll('.chart-svg circle').length,
+      envelope: document.querySelectorAll('.chart-svg polygon').length,
+      experiments: document.querySelectorAll('.try-head').length,
+      nan: document.body.innerText.includes('NaN')
+    }
+  })()`)
+  const num = (v) => parseFloat(v ?? 'NaN')
+  record(
+    'Ch 8 draws a carpet of both contour families',
+    mmm.contours > 20 && mmm.envelope >= 1,
+    `${mmm.contours} contours, ${mmm.envelope} envelope`
+  )
+  record(
+    'Ch 8 trimmed limit reproduces the Ch 7 pair-analysis limit',
+    Math.abs(num(mmm.base['Trimmed limit (Ch 8)']) - num(mmm.base['Same car via Ch 7 pair analysis'])) <
+      0.005,
+    `Ch 8 ${mmm.base['Trimmed limit (Ch 8)']} vs Ch 7 ${mmm.base['Same car via Ch 7 pair analysis']}`
+  )
+  record(
+    'Ch 8 recovers the understeer gradient from stability over control',
+    Math.abs(num(mmm.base['K from the map']) - num(mmm.base['K from Ch 5'])) < 0.05,
+    `map ${mmm.base['K from the map']} vs Ch 5 ${mmm.base['K from Ch 5']}`
+  )
+  record(
+    'Ch 8 reports the balance loss as max Ay minus max trimmed Ay',
+    Math.abs(
+      num(mmm.base['Max Ay anywhere']) -
+        num(mmm.base['Max trimmed Ay']) -
+        num(mmm.base['Thrown away'])
+    ) < 0.002 && num(mmm.base['Thrown away']) >= 0,
+    `${mmm.base['Max Ay anywhere']} - ${mmm.base['Max trimmed Ay']} = ${mmm.base['Thrown away']}`
+  )
+  record(
+    'Ch 8 calls the default car stable',
+    num(mmm.base['Stability ∂N/∂Ay']) < 0 && num(mmm.base['Control ∂N/∂δ']) > 0,
+    `stability ${mmm.base['Stability ∂N/∂Ay']}, control ${mmm.base['Control ∂N/∂δ']}`
+  )
+  record(
+    'Ch 8 flips stability positive when the rear loses grip',
+    num(mmm.loose['Stability ∂N/∂Ay']) > 0 && num(mmm.loose['K from the map']) < 0,
+    `stability ${mmm.base['Stability ∂N/∂Ay']} -> ${mmm.loose['Stability ∂N/∂Ay']}`
+  )
+  record(
+    'Ch 8 keeps agreeing with Ch 7 after a setup change',
+    Math.abs(
+      num(mmm.loose['Trimmed limit (Ch 8)']) - num(mmm.loose['Same car via Ch 7 pair analysis'])
+    ) < 0.005 && !mmm.nan,
+    `Ch 8 ${mmm.loose['Trimmed limit (Ch 8)']} vs Ch 7 ${mmm.loose['Same car via Ch 7 pair analysis']}`
+  )
+  record('Ch 8 experiments listed', mmm.experiments === 5, `${mmm.experiments} experiments`)
+
   // Aerodynamics and the g-g envelope. The claim worth checking is that
   // downforce actually reaches the vehicle model rather than sitting in its own
   // corner of the app.

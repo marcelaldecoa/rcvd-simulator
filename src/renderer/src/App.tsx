@@ -12,6 +12,7 @@ import { TireLab } from './labs/TireLab'
 import { SteadyStateLab } from './labs/SteadyStateLab'
 import { TransientLab } from './labs/TransientLab'
 import { PairAnalysisLab } from './labs/PairAnalysisLab'
+import { MomentMethodLab } from './labs/MomentMethodLab'
 import { WheelLoadsLab } from './labs/WheelLoadsLab'
 import { useGarage } from './store/garage'
 import { summarise } from '@core/vehicle/steadyState.js'
@@ -32,6 +33,8 @@ function LabFor({ chapter }: { chapter: Chapter }): React.JSX.Element {
       return <TransientLab />
     case 'pair':
       return <PairAnalysisLab />
+    case 'mmm':
+      return <MomentMethodLab />
     case 'wheelLoads':
       return <WheelLoadsLab />
     case 'glossary':

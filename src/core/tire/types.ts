@@ -52,6 +52,8 @@ export interface TireModel {
   combined(state: TireState): TireForces
   /** Slope of the Fy-alpha curve at the origin, N/rad. */
   corneringStiffness(fz: number): number
+  /** Camber thrust per radian of inclination angle, N/rad. */
+  camberStiffness(fz: number): number
   /** Effective lateral friction coefficient at this load (peak Fy / Fz). */
   muY(fz: number): number
   /** Effective longitudinal friction coefficient at this load. */

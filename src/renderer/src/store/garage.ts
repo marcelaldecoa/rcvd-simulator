@@ -19,6 +19,11 @@ import { FORMULA_CAR, derive, type BicycleVehicle } from '@core/vehicle/params.j
 import type { FuelTank } from '@core/conditions/index.js'
 import { FORMULA_CHASSIS, type ChassisParams } from '@core/vehicle/chassis.js'
 import { HIGH_DOWNFORCE, type AeroParams } from '@core/aero/index.js'
+import {
+  FORMULA_COMPLIANCE,
+  type AxleCompliance,
+  type SuspensionCompliance
+} from '@core/vehicle/understeerBudget.js'
 import { DEFAULT_POWERTRAIN, type PowertrainParams } from '@core/performance/gg.js'
 
 export type UnitSystem = 'SI' | 'Imperial'
@@ -86,6 +91,14 @@ interface GarageState {
   chassis: ChassisParams
   /** Aerodynamics -- Ch 3 and 15. */
   aero: AeroParams
+  /**
+   * Suspension compliance and roll geometry -- Ch 17, 19 and 23.
+   *
+   * Lives in the garage rather than in the Ch 5 lab because it is a property of
+   * the car, and because the understeer budget's whole point is that Chapter 5
+   * cannot fill in its own table: the rows come from four other chapters.
+   */
+  compliance: SuspensionCompliance
   /** Engine and braking, for the g-g envelope -- Ch 9. */
   powertrain: PowertrainParams
   units: UnitSystem
@@ -99,6 +112,7 @@ interface GarageState {
   setTank: (t: Partial<FuelTank>) => void
   setChassis: (c: Partial<ChassisParams>) => void
   setAero: (a: Partial<AeroParams>) => void
+  setCompliance: (axle: 'front' | 'rear', patch: Partial<AxleCompliance>) => void
   setPowertrain: (p: Partial<PowertrainParams>) => void
   setUnits: (u: UnitSystem) => void
   /**
@@ -122,6 +136,10 @@ export const useGarage = create<GarageState>((set, get) => ({
   tank: { capacity: 60, position: 1.9 },
   chassis: { ...FORMULA_CHASSIS },
   aero: { ...HIGH_DOWNFORCE },
+  compliance: {
+    front: { ...FORMULA_COMPLIANCE.front },
+    rear: { ...FORMULA_COMPLIANCE.rear }
+  },
   powertrain: { ...DEFAULT_POWERTRAIN },
   units: 'SI',
 
@@ -134,6 +152,10 @@ export const useGarage = create<GarageState>((set, get) => ({
   setTank: (t) => set((s) => ({ tank: { ...s.tank, ...t } })),
   setChassis: (c) => set((s) => ({ chassis: { ...s.chassis, ...c } })),
   setAero: (a) => set((s) => ({ aero: { ...s.aero, ...a } })),
+  setCompliance: (axle, patch) =>
+    set((s) => ({
+      compliance: { ...s.compliance, [axle]: { ...s.compliance[axle], ...patch } }
+    })),
   setPowertrain: (p) => set((s) => ({ powertrain: { ...s.powertrain, ...p } })),
   setUnits: (units) => set({ units }),
 
