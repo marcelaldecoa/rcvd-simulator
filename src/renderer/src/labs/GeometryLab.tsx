@@ -6,12 +6,11 @@
  * they cannot be chosen independently. Ch 17 §4 says so; this lab is where you
  * can fail to separate them yourself.
  *
- * The lab also carries a correction. The companion notes' Exercise 17.1 puts
- * that geometry's roll centre 438 mm ABOVE ground; the construction actually
- * puts it 165 mm below. The notes solve the instant centre in a frame local to
- * the wheel and then read the roll centre as though the answer were a vehicle
- * coordinate, and drop a sign on the way. The preset is here so the picture can
- * make the point that no amount of arithmetic will.
+ * The Exercise 17.1 preset is here because its geometry fails in a way that is
+ * obvious in a picture and easy to miss in arithmetic: both arms rise going
+ * inboard, so they meet OUTBOARD of the wheel, and the line from there through
+ * the contact patch descends -- putting the roll centre below ground. Drawing
+ * it makes the sign self-evident.
  */
 
 import { useMemo } from 'react'
@@ -158,27 +157,26 @@ export function GeometryLab(): React.JSX.Element {
       )
     },
     {
-      title: 'Load the notes’ own Exercise 17.1 geometry',
+      title: 'Load the Exercise 17.1 geometry and find the roll centre',
       action: 'Switch the front geometry to the exercise preset.',
-      predict: 'Where does the roll centre end up?',
+      predict: 'Where does the roll centre end up — and which side of the ground?',
       result: (
         <>
-          <strong>165 mm below ground</strong> — not the 438 mm above that the companion
-          notes report. Both arms rise going inboard, so they meet <em>outboard</em> of the
-          wheel; the line from there through the contact patch descends as it runs inward,
-          and by the centreline it is under the road.
+          <strong>165 mm below ground.</strong> Both arms rise going inboard, so they meet{' '}
+          <em>outboard</em> of the wheel; the line from there through the contact patch
+          descends as it runs inward, and by the centreline it is under the road.
           <br />
           <br />
-          The notes solve the instant centre in a frame measured from the wheel (getting
-          1.244 m outboard, correctly) and then use that number as though it were a vehicle
-          coordinate against a contact patch at 0.775 m — so they work with a 0.469 m
-          separation instead of the 1.244 m they had just computed, and drop the sign on a
-          descending line.
+          There is a trap worth knowing in this construction. The arm intersection is solved
+          in coordinates measured from the <em>wheel</em> centreline, where it lands 1.244 m
+          out. Read that as a <em>vehicle</em> coordinate against a contact patch at 0.775 m
+          and you are working with a 0.469 m separation instead of the 1.244 m you just
+          computed — which gives 438 mm instead of 165, a factor of nearly three, with
+          nothing in the arithmetic to complain. Hold one frame throughout.
           <br />
           <br />
-          Their <em>conclusion</em> survives, for a better reason: an outboard instant
-          centre buries the roll centre, and a 1.24 m swing arm is a savage camber curve.
-          Not a sensible layout — but not because the roll centre is high.
+          Either way the geometry is unusable, for two independent reasons: the roll centre
+          is underground, and a 1.24 m swing arm is a savage camber curve.
         </>
       ),
       run: () => setGeometry('front', EXERCISE_17_1),

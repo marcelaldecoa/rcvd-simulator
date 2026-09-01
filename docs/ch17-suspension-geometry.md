@@ -170,7 +170,31 @@ $$
 
 So 30 mm of bump gives about 1.38° of negative camber gain. This is a fairly short FVSA and an aggressive camber curve — appropriate for a car with substantial roll, less so for a stiff formula car where it would produce unwanted camber change in heave under aerodynamic load.
 
-**Roll centre**: drawing a line from this IC (at $x=-1.244$, $y=0.265$) through the contact patch (at $x = -0.775$ m from centreline, $y=0$ for a 1.55 m track), and intersecting with the mirror-image line from the other side at the vehicle centreline. The line has slope $(0 - 0.265)/(-0.775-(-1.244)) = -0.265/0.469 = -0.565$; extending from the contact patch at $x=-0.775$ to $x=0$ gives $y = 0 + 0.565(0.775) = 0.438$ m. That is a very high roll centre — 438 mm — confirming that this geometry (IC outboard and high) is not a sensible race car layout. **A useful lesson: the IC position controls camber gain and roll centre simultaneously, and they cannot be chosen independently.** A good design places the IC well inboard and slightly above ground to get a long FVSA with a low roll centre.
+**Roll centre**: draw a line from the IC through the contact patch and read its height at the vehicle centreline.
+
+The frame has to be watched here. The intersection above was solved in coordinates measured from the *wheel centreline*, where it came out 1.244 m outboard. In *vehicle* coordinates, with a 1.55 m track, the contact patch sits at $x = -0.775$ m and the IC is a further 1.244 m outboard of it, at $x = -2.019$ m — not at $-1.244$. Mixing the two frames is the easiest mistake to make in this construction, and it changes the answer by a factor of nearly three.
+
+Line slope, in one frame throughout:
+
+$$
+m = \frac{0 - 0.265}{-0.775 - (-2.019)} = \frac{-0.265}{1.244} = -0.213
+$$
+
+Extending from the contact patch inboard to $x = 0$:
+
+$$
+h_{RC} = 0 + (-0.213)(0 - (-0.775)) = -0.165\ \text{m}
+$$
+
+**The roll centre is 165 mm *below* ground.** The sign is the whole result, and it follows directly from the IC being outboard: the line from an outboard, above-ground IC *descends* as it runs inboard, so by the time it reaches the centreline it is under the road. The general relation is
+
+$$
+h_{RC} = \frac{h_{IC}\,(t/2)}{\text{FVSA}}
+$$
+
+with FVSA signed — positive for an inboard IC, negative for an outboard one.
+
+The conclusion about the geometry survives, and is if anything stronger: a 1.24 m swing arm is an aggressive camber curve, *and* the roll centre is underground, where it produces the opposite of jacking and a load path nobody designed. **The useful lesson stands: the IC position controls camber gain and roll centre simultaneously, and they cannot be chosen independently.** A good design places the IC well inboard and slightly above ground, giving a long FVSA with a low but positive roll centre.
 
 **17.2**
 The roll axis joins the front RC (45 mm) and rear RC (85 mm). CG is at 46% front, i.e. $0.46 \times 2.65 = 1.219$ m behind the front axle.

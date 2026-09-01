@@ -14,9 +14,9 @@
  *     ground, positive up; the contact patch sits at half a track from the
  *     vehicle centreline.
  *   - Arm intersections are solved in a frame local to the wheel centreline
- *     with x measured INBOARD, which is why the companion notes' Exercise 17.1
- *     goes wrong: it solves the instant centre in that local frame and then
- *     reads the roll centre as though the answer were a vehicle coordinate.
+ *     with x measured INBOARD. Converting that answer to a vehicle coordinate
+ *     before constructing the roll centre is the step it is easiest to skip,
+ *     and skipping it changes the answer by a factor of nearly three.
  *   - FVSA is SIGNED: positive when the instant centre lies INBOARD of the
  *     contact patch (the normal case), negative when it lies outboard. The sign
  *     matters, because an outboard IC puts the roll centre BELOW ground.
@@ -103,8 +103,8 @@ export function instantCentre(g: WishboneGeometry): InstantCentre {
  *
  * The sign is not a detail. An IC that is OUTBOARD and above ground makes the
  * line descend as it runs inboard, so the roll centre lands BELOW ground --
- * which is exactly the case the companion notes' Exercise 17.1 geometry
- * produces, and exactly what makes that geometry unusable.
+ * which is exactly what Ch 17 Exercise 17.1's geometry produces, and exactly
+ * what makes it unusable.
  */
 export function rollCentreFromIc(fvsa: number, icHeight: number, track: number): number {
   if (!isFinite(fvsa) || fvsa === 0) return 0

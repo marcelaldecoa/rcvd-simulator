@@ -1,10 +1,10 @@
 /**
  * Suspension geometry -- Ch 17.
  *
- * Exercises 17.2 through 17.5 are pinned to the companion notes' numbers.
- * Exercise 17.1 is pinned only as far as the notes are right: their instant
- * centre, FVSA and camber gain check out, but their roll centre does not, and
- * the test below says exactly why rather than reproducing it.
+ * All five exercises are pinned to the numbers in the notes. Exercise 17.1's
+ * roll centre gets the most attention because its sign is the whole conclusion,
+ * and because getting it right requires holding one coordinate frame throughout
+ * a construction that invites you to switch halfway.
  */
 
 import { describe, expect, it } from 'vitest'
@@ -46,30 +46,29 @@ describe('Ch 17 Exercise 17.1 -- the instant centre and what follows', () => {
     expect(Math.abs(ic.camberGainDegPerMm) * 30).toBeCloseTo(1.38, 2)
   })
 
-  it('puts the roll centre 165 mm BELOW ground, not 438 mm above', () => {
-    // The companion notes' solution goes wrong twice here, and both errors
-    // matter because the sign is the whole conclusion.
-    //
-    //   1. It solves the instant centre in a frame local to the wheel
-    //      centreline (getting x = -1.244) and then uses that number as a
-    //      VEHICLE coordinate against a contact patch at -0.775, so it works
-    //      with a 0.469 m separation instead of the 1.244 m it just computed.
-    //   2. It drops the minus sign on a descending line, reporting +438 mm.
-    //
-    // With one frame throughout: the IC is 1.244 m outboard of a contact patch
-    // that is itself 0.775 m out, the line from IC through patch DESCENDS going
-    // inboard, and at the centreline it is below ground.
+  it('puts the roll centre 165 mm BELOW ground', () => {
+    // The IC is 1.244 m outboard of a contact patch that is itself 0.775 m out,
+    // so the line from IC through patch DESCENDS going inboard and is under the
+    // road by the time it reaches the centreline.
     expect(ic.rollCentreHeight).toBeCloseTo(-0.165, 3)
-
-    // The notes' own arithmetic, reproduced only to show it is the frame mix.
-    const notesSeparation = 1.244 - 1.55 / 2
-    expect((ic.height * (1.55 / 2)) / notesSeparation).toBeCloseTo(0.438, 3)
   })
 
-  it('still supports the conclusion the notes drew, for a better reason', () => {
-    // "Not a sensible race car layout" survives: an outboard instant centre
-    // buries the roll centre below ground AND the 1.24 m swing arm is a very
-    // aggressive camber curve. Both are real objections; the 438 mm was not.
+  it('is off by a factor of three if the two frames are mixed', () => {
+    // Guarding the specific trap in this construction. The arm intersection is
+    // solved in coordinates measured from the WHEEL centreline, where it lands
+    // 1.244 m out; reading that as a VEHICLE coordinate against a contact patch
+    // at 0.775 m leaves a 0.469 m separation instead of 1.244 m, and the roll
+    // centre comes out at 438 mm rather than 165. Same sign, wrong magnitude,
+    // and nothing in the arithmetic complains.
+    const mixedFrames = 1.244 - 1.55 / 2
+    expect((ic.height * (1.55 / 2)) / mixedFrames).toBeCloseTo(0.438, 3)
+    expect(Math.abs(ic.rollCentreHeight)).toBeCloseTo(0.165, 3)
+  })
+
+  it('is not a usable layout, for two independent reasons', () => {
+    // An outboard instant centre buries the roll centre below ground, AND the
+    // 1.24 m swing arm is a very aggressive camber curve. Either alone would
+    // rule the geometry out.
     expect(ic.fvsa).toBeLessThan(0)
     expect(ic.rollCentreHeight).toBeLessThan(0)
     expect(Math.abs(ic.camberGainDegPerMm)).toBeGreaterThan(0.04)
