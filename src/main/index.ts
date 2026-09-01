@@ -2,7 +2,6 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { join } from 'node:path'
 import { docsDir, listDocs, readDocFile } from './docs.js'
 import { SettingsStore } from './settings.js'
-import { CoachService, type CoachRequest } from './coachService.js'
 import { applyOverlayConfig, type OverlayConfig } from './overlayConfig.js'
 import { createOverlayHost, type OverlayHost } from './overlayWindow.js'
 import { TelemetryService, type SourceChoice } from './telemetryService.js'
@@ -19,7 +18,6 @@ const resolveDocsDir = (): string =>
 let mainWindow: BrowserWindow | null = null
 let overlay: OverlayHost | null = null
 let settings: SettingsStore | null = null
-const coach = new CoachService(() => settings?.get().anthropicApiKey)
 const telemetry = new TelemetryService()
 
 function createWindow(): void {
@@ -145,22 +143,6 @@ app.whenReady().then(async () => {
   })
   ipcMain.handle('telemetry:state', () => telemetry.state())
   ipcMain.handle('telemetry:samples', () => telemetry.samples())
-  // The coach. Three handlers and no more: ask whether it can run, set the key,
-  // and run it once when told to. Nothing here fires on its own.
-  ipcMain.handle('coach:status', () => ({
-    ...coach.available(),
-    hasKey: Boolean(settings?.get().anthropicApiKey)
-  }))
-  ipcMain.handle('coach:setKey', (_e, key: unknown) => {
-    const value = typeof key === 'string' ? key.trim() : ''
-    // The key itself is never handed back to the renderer -- only whether one
-    // is set. There is no reason for the UI to be able to read it out again,
-    // and plenty of reasons (screenshots, screen shares) for it not to.
-    settings?.update({ anthropicApiKey: value || undefined })
-    return { ...coach.available(), hasKey: Boolean(value) }
-  })
-  ipcMain.handle('coach:debrief', async (_e, req: CoachRequest) => coach.debrief(req))
-
   ipcMain.handle('telemetry:pick', async () => {
     const result = await dialog.showOpenDialog({
       title: 'Open an iRacing telemetry file',

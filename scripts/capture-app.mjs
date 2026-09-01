@@ -1,5 +1,5 @@
 /**
- * Screenshot a lab from the running app, for the README.
+ * Screenshot the overlay's settings from the running app, for the README.
  *
  * Same principle as capture-overlay.mjs: drive the real window rather than
  * mocking one up, so what lands in docs/images is what the app actually draws
@@ -10,7 +10,6 @@
 import { app, BrowserWindow } from 'electron'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
-import { existsSync } from 'node:fs'
 
 await import('../out/main/index.js')
 
@@ -42,75 +41,24 @@ app.whenReady().then(async () => {
 
   const js = (code) => win.webContents.executeJavaScript(code)
 
-  // Prefer the generated session file: it has laps, lap times and a heading
-  // channel, so the whole dashboard is populated rather than half of it. The
-  // synthetic sweep is a matrix of steady trims, not a lap.
-  const ibt = resolve('.smoke-session.ibt')
-  const source = existsSync(ibt) ? JSON.stringify({ file: ibt }) : "'synthetic'"
-  if (!existsSync(ibt)) {
-    console.log('note: .smoke-session.ibt missing, falling back to the synthetic sweep')
-    console.log('      run `npm run smoke` first for a fuller screenshot')
-  }
-
-  await js(`(async () => {
-    const SOURCE = ${source};
-    const item = [...document.querySelectorAll('.nav-item')].find(e => e.textContent.includes('Session Dashboard'))
-    item.click()
-    await new Promise(r => setTimeout(r, 400))
-    await window.rcvd.selectSource(SOURCE)
-    // Wait for the widgets, which need enough samples to have accumulated.
-    const deadline = Date.now() + 25000
-    while (Date.now() < deadline) {
-      if (document.querySelectorAll('.dash-grid .panel').length > 0) break
-      await new Promise(r => setTimeout(r, 200))
-    }
-    // A little longer, so the numbers settle rather than being caught mid-fill.
-    await new Promise(r => setTimeout(r, 4000))
-  })()`)
-
-  const widgets = await js("document.querySelectorAll('.dash-grid .panel').length")
-  if (!widgets) {
-    console.log('FAIL  dashboard rendered no widgets')
-    return app.exit(1)
-  }
-
-  const image = await win.webContents.capturePage()
-  const file = join(OUT, 'dashboard.png')
-  await writeFile(file, image.toPNG())
-  console.log(`wrote ${file}  ${image.getSize().width}x${image.getSize().height}  ${widgets} widgets`)
-
-  // The coach, in its default state -- no key, so nothing can leave the
-  // machine. That is the state worth documenting.
-  await js(`(async () => {
-    const panel = [...document.querySelectorAll('.panel')].find(
-      p => p.querySelector('.panel-title')?.textContent === 'Debrief'
-    )
-    panel?.scrollIntoView({ block: 'center' })
-    await new Promise(r => setTimeout(r, 700))
-  })()`)
-  const coachShot = await win.webContents.capturePage()
-  const coachFile = join(OUT, 'coach.png')
-  await writeFile(coachFile, coachShot.toPNG())
-  console.log(`wrote ${coachFile}`)
-
-  // And the audible-cue settings, which live with the rest of the overlay
-  // controls in the telemetry lab.
+  // The audible-cue settings, which live with the rest of the overlay controls.
   await js(`(async () => {
     const item = [...document.querySelectorAll('.nav-item')].find(e => e.textContent.includes('iRacing Telemetry'))
     item.click()
-    await new Promise(r => setTimeout(r, 600))
+    await new Promise(r => setTimeout(r, 800))
     const panel = [...document.querySelectorAll('.panel')].find(
       p => p.querySelector('.panel-title')?.textContent === 'Audible warning'
     )
-    panel?.scrollIntoView({ block: 'center' })
+    if (!panel) throw new Error('audible warning panel missing')
+    panel.scrollIntoView({ block: 'center' })
     await new Promise(r => setTimeout(r, 700))
   })()`)
-  const soundShot = await win.webContents.capturePage()
-  const soundFile = join(OUT, 'sound-settings.png')
-  await writeFile(soundFile, soundShot.toPNG())
-  console.log(`wrote ${soundFile}`)
 
-  await js('window.rcvd.stopTelemetry()')
+  const image = await win.webContents.capturePage()
+  const file = join(OUT, 'sound-settings.png')
+  await writeFile(file, image.toPNG())
+  console.log(`wrote ${file}  ${image.getSize().width}x${image.getSize().height}`)
+
   clearTimeout(watchdog)
   app.exit(0)
 })

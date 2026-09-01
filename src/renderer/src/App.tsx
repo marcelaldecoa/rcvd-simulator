@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { CHAPTERS, PARTS, type Chapter } from './data/chapters'
 import { Notes } from './components/Notes'
 import { Exercises } from './components/Exercises'
@@ -21,10 +21,8 @@ import { ComplianceLab } from './labs/ComplianceLab'
 import { TireDataLab } from './labs/TireDataLab'
 import { DamperLab } from './labs/DamperLab'
 import { TelemetryLab } from './labs/TelemetryLab'
-import { DashboardLab } from './labs/DashboardLab'
 import { WheelLoadsLab } from './labs/WheelLoadsLab'
 import { useGarage } from './store/garage'
-import { useNav } from './store/nav'
 import { summarise } from '@core/vehicle/steadyState.js'
 
 type View = 'lab' | 'notes' | 'exercises'
@@ -61,8 +59,6 @@ function LabFor({ chapter }: { chapter: Chapter }): React.JSX.Element {
       return <DamperLab />
     case 'telemetry':
       return <TelemetryLab />
-    case 'dashboard':
-      return <DashboardLab />
     case 'wheelLoads':
       return <WheelLoadsLab />
     case 'glossary':
@@ -95,20 +91,6 @@ export function App(): React.JSX.Element {
   const vehicle = useGarage((s) => s.vehicle)
   const speed = useGarage((s) => s.speed)
   const s = summarise(vehicle)
-
-  // A widget asked to open the lab behind one of its numbers. The shell owns
-  // which chapter is showing, so the request is consumed here and cleared.
-  const request = useNav((n) => n.request)
-  const consume = useNav((n) => n.consume)
-  useEffect(() => {
-    if (!request) return
-    const target = CHAPTERS.find((c) => c.lab === request)
-    if (target) {
-      setActive(target)
-      setView('lab')
-    }
-    consume()
-  }, [request, consume])
 
   const showLab = active.lab !== undefined
   const hasExercises = active.n > 0

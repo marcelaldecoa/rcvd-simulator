@@ -26,8 +26,6 @@ slip-angle overlay on screen.
 - [Reading it alongside the book](#reading-it-alongside-the-book) ← **start here**
 - [The garage](#the-garage)
 - [iRacing telemetry and the overlay](#iracing-telemetry-and-the-overlay)
-- [The session dashboard](#the-session-dashboard)
-- [The debrief](#the-debrief)
 - [Running it](#running-it)
 - [What is in each lab](#what-is-in-each-lab)
 - [Layout](#layout)
@@ -350,99 +348,6 @@ Sounds are synthesised, not sampled — nothing to ship, and *tone*, *blip* and
 
 ---
 
-## The session dashboard
-
-<p align="center">
-  <img src="docs/images/dashboard.png" width="900" alt="The session dashboard">
-</p>
-
-Your own session, measured — and **every widget names the chapter it comes from
-and opens that chapter's lab**. That link is the point rather than decoration. A
-number off a trace is inert until you can go and turn the knob that governs it.
-
-Works from a live session or a `.ibt` file. Six widgets:
-
-| Widget | Question | Goes to |
-|---|---|---|
-| **Balance** | Which end gave up first, and how often | Ch 5 |
-| **Grip used** | How far out toward the friction envelope you drove | Ch 9 |
-| **Where the grip is going unused** | Which stretches have time in them | Ch 7 |
-| **Tyre limits, as observed** | Where this car's peaks actually are | Ch 2 / 14 |
-| **Track** | The circuit, coloured by grip used | — |
-| **Lap times** | The laps, and the deltas | Ch 11 |
-
-### About the optimal line
-
-It was asked for and it is **not here**, because it cannot honestly be built. A
-true optimal racing line is a minimum-time optimal-control problem and it needs
-the track boundaries; iRacing does not publish them. Anything claiming one from
-telemetry alone is a best-lap trace with a better label.
-
-What is here instead is the honest form of the same question, and it comes
-straight out of the book: **grip left on the table**. At each point around the
-lap, how much of the available friction you actually used — Ch 9's g-g diagram
-applied around a circuit. A corner taken at 70% of the envelope is time thrown
-away whatever your other laps did.
-
-Both answers to *where am I losing time* are offered, because they fail
-differently:
-
-- **Against another lap** is precise and relative. It says where this lap lost to
-  that one, and nothing about whether either was any good.
-- **Against the envelope** is absolute and approximate, and only as good as the
-  match between the garage car and the one you drove. The page says so when that
-  match looks wrong — at both ends, too much grip modelled and too little.
-
-### About the track map
-
-There is no position channel, so the shape is integrated from the sim's
-**absolute** heading and your speed. If a source has no heading channel the map
-declines to draw rather than integrating the yaw rate instead: that substitute
-looks right for the first corners and then bends the far side of the circuit
-somewhere it never went, and a metric painted on a wrong map points at the wrong
-corner with total confidence.
-
-A lap that ends a long way from where it started is left **open** and says so.
-Forcing it shut does not fix a map, it invents one — and out-laps, partial laps
-and point-to-point runs all look like that.
-
----
-
-## The debrief
-
-<p align="center">
-  <img src="docs/images/coach.png" width="900" alt="The debrief panel with no key set">
-</p>
-
-An AI race engineer that debriefs your session in the book's own vocabulary and
-tells you which chapter governs each suggestion.
-
-**This is the only feature in the app that sends anything off your machine.**
-So it is deliberately grudging:
-
-- **Off until you enter your own Anthropic API key.** No key, no call.
-- **It runs once per press.** No polling, no background refresh, no debriefing
-  you on session end because it thought you would like that.
-- **It never sends raw telemetry.** What goes is the derived summary — the same
-  numbers on the dashboard, a page of JSON — and **Show what is sent** prints it
-  in full so you can read it before pressing anything. A test enforces that no
-  raw channel can reach the payload.
-- **The key is never read back** to the page once saved. It is stored in the
-  settings file in plain text, like every other setting, which is worth saying
-  plainly rather than implying a vault.
-
-Each debrief is one API call, billed to your key.
-
-The prompt is strict about what telemetry can claim. It can say a corner was
-slower and that more lock was used through it; it **cannot** say the car
-understeered, only that the driver added steering. Ch 11's discipline about
-confounders applies to reading data as much as to running a test. It is also
-told to say *the session is too short to conclude anything* when that is true,
-rather than manufacturing advice — which is the failure mode of every coaching
-tool that has ever existed.
-
----
-
 ## Running it
 
 ```bash
@@ -454,8 +359,8 @@ npm run dev
 |---|---|
 | `npm run dev` | The desktop app. Telemetry and the overlay need this |
 | `npm run dev:web` | Labs in a plain browser; no Electron, no telemetry |
-| `npm test` | 676 unit tests |
-| `npm run smoke` | 102 checks in a real Electron window — IPC, every lab, the overlay |
+| `npm test` | 697 unit tests |
+| `npm run smoke` | 107 checks in a real Electron window — IPC, every lab, the overlay |
 | `npm run capture:overlay` | Regenerate the screenshots in `docs/images/` |
 | `npm run dist` | A Windows installer into `release/` |
 
@@ -469,7 +374,6 @@ npm run dev
 | **Start here** | Changing Conditions | Fuel, wear, temperature, pressure, track grip; A/B compare, stint timeline, sensitivity ranking |
 | **Start here** | The Formulas | 17 equations, live-substituted, decomposed into terms, swept on a chart |
 | **Start here** | Glossary · Glossário | 248 terms EN ⇄ PT-BR, accent-insensitive search |
-| **Start here** | Session Dashboard | Your session measured, each widget linking to the chapter behind it; track map and where the grip went unused |
 | **Start here** | iRacing Telemetry | Live slip angles, the overlay, audible cues, post-session identification and lap comparison |
 | 2 | Tire Behavior | Contact patch, Magic Formula and brush, load sensitivity, trail collapse, friction ellipse |
 | 3 / 15 | Aerodynamics | Downforce and drag, aero balance, the speed-dependent cornering limit |
@@ -505,7 +409,7 @@ src/
     conditions/    fuel, wear, temperature, pressure, track grip
     util/          numerics — RK4, root finding, eigenvalues
   telemetry/       irsdk layout, live and .ibt sources, state estimation,
-                   identification, histograms, lap comparison
+                   identification, histograms, lap comparison, audible cues
   renderer/        React labs and charts, plus the canvas overlay
   main/, preload/  Electron shell, overlay window, settings
 docs/              the 23 chapters of notes, the glossary, images
@@ -540,7 +444,7 @@ failure mode Ch 4 warns is the most common in the subject:
 `npm run smoke` covers what unit tests cannot: it launches the compiled main
 process and drives the real UI — IPC and path traversal, every lab's readouts,
 the overlay window's flags and that it paints, the telemetry pipeline, and a
-synthetic `.ibt` parsed through the genuine file path. 102 checks.
+synthetic `.ibt` parsed through the genuine file path. 107 checks.
 
 One thing no test can reach is the live connection to iRacing, because it needs
 the simulator. `npm run live:check` is the substitute, and running it against a

@@ -70,8 +70,6 @@ interface Row {
   longAccel: number
   lap: number
   lapDistPct: number
-  /** Absolute heading, rad, as the sim's YawNorth. Integrated from yaw rate. */
-  heading: number
   shock: [number, number, number, number]
 }
 
@@ -125,10 +123,6 @@ function buildLap(lapNumber: number, t0: number, slow: boolean, rand: () => numb
 
   let dist = 0
   let t = t0
-  // Heading accumulates across the whole lap, which is what turns a list of
-  // corners into a closed circuit rather than a set of unrelated arcs. It is
-  // reset per lap so every lap traces the same shape.
-  let heading = 0
   for (const seg of plan) {
     const steer = steerFor(seg)
     const trim = seg.ay === 0 ? null : trimFromSteer(FORMULA_CAR, seg.speed, steer)
@@ -150,11 +144,9 @@ function buildLap(lapNumber: number, t0: number, slow: boolean, rand: () => numb
         longAccel: 0,
         lap: lapNumber,
         lapDistPct: Math.min(dist / LAP_LENGTH, 0.9999),
-        heading,
         shock: [shockOf(), shockOf(), shockOf(), shockOf()]
       })
       dist += seg.speed / RATE
-      heading += (trim ? trim.yawRate : 0) / RATE
       t += 1 / RATE
     }
   }
@@ -198,7 +190,6 @@ async function main(): Promise<void> {
       { name: CHANNELS.brake, type: VarType.Float, values: col(() => 0) },
       { name: CHANNELS.lap, type: VarType.Int, values: col((r) => r.lap) },
       { name: CHANNELS.lapDistPct, type: VarType.Float, values: col((r) => r.lapDistPct) },
-      { name: CHANNELS.heading, type: VarType.Float, values: col((r) => r.heading) },
       { name: CHANNELS.gear, type: VarType.Int, values: col(() => 4) },
       { name: CHANNELS.rpm, type: VarType.Float, values: col(() => 7200) },
       { name: 'LFshockVel', type: VarType.Float, values: col((r) => r.shock[0]) },

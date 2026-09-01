@@ -44,16 +44,6 @@ export interface TelemetrySample {
   lapDistPct: number
   /** Lap number. */
   lap: number
-  /**
-   * Absolute heading, rad, from the sim's own compass rather than integrated.
-   *
-   * This is what makes a reconstructed track map hold its shape. Integrating
-   * the yaw RATE accumulates error in the heading, which bends the whole map
-   * into a spiral; taking the heading directly leaves only position to
-   * integrate, and that closes with a single correction at the line. iRacing
-   * publishes it as YawNorth.
-   */
-  heading?: number
   /** Gear, 0 = neutral, -1 = reverse. */
   gear?: number
   /** Engine speed, rad/s. */

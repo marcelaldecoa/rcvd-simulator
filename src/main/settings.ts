@@ -21,16 +21,6 @@ export interface Settings {
   lastSessionFile?: string
   /** Steering ratio to use when the sim does not publish one. */
   steeringRatio?: number
-  /**
-   * Anthropic API key for the post-session coach, supplied by the user.
-   *
-   * Absent by default, and the coach is unavailable until it is set -- so
-   * nothing about a session can leave the machine unless the user has
-   * deliberately enabled it. Stored in the same plain JSON as everything else,
-   * which is worth being explicit about rather than implying a vault: it is
-   * readable by anything that can read the user's own files.
-   */
-  anthropicApiKey?: string
 }
 
 export class SettingsStore {
@@ -56,10 +46,6 @@ export class SettingsStore {
         steeringRatio:
           typeof parsed.steeringRatio === 'number' && Number.isFinite(parsed.steeringRatio)
             ? parsed.steeringRatio
-            : undefined,
-        anthropicApiKey:
-          typeof parsed.anthropicApiKey === 'string' && parsed.anthropicApiKey.trim()
-            ? parsed.anthropicApiKey.trim()
             : undefined
       }
     } catch {
