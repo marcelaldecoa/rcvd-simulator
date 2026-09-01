@@ -294,6 +294,13 @@ Symbols follow the book's notation. | Os símbolos seguem a notação do livro.
 | Fuel load | Carga de combustível | — | |
 | Telemetry | Telemetria | — | |
 | Data acquisition | Aquisição de dados | — | ⚑ "data logging" |
+| Overlay | Sobreposição (overlay) | — | ⚑ usa-se em inglês; caixa sobre a imagem do simulador |
+| Shared memory | Memória compartilhada | — | Como o iRacing publica a telemetria ao vivo |
+| Session file (.ibt) | Arquivo de sessão (.ibt) | — | Telemetria gravada, para análise pós-sessão |
+| Channel | Canal | — | Uma grandeza registrada, ex. `LatAccel` |
+| Sample rate | Taxa de amostragem | — | 60 Hz no iRacing |
+| Handwheel angle | Ângulo do volante | — | Dividir pela relação de direção para chegar à roda |
+| Parameter identification | Identificação de parâmetros | — | Extrair $K$, $C_lpha$ etc. dos dados |
 | Moment Method | Método dos Momentos | — | Abrev. MMM / MRA; diagrama $N$ vs $A_y$ |
 | Trim point | Ponto de equilíbrio | $N = 0$ | ⚑ "trim"; estado que o carro consegue manter |
 | Trim line | Linha de equilíbrio | $N = 0$ | Todos os pontos de equilíbrio do diagrama MMM |

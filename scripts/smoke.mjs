@@ -73,7 +73,9 @@ app.whenReady().then(async () => {
   record('path traversal blocked', blocked === 'BLOCKED', String(blocked))
 
   const chapters = await js("document.querySelectorAll('.nav-item').length")
-  record('renderer mounted', chapters === 28, `${chapters} nav entries in the sidebar`)
+  // A floor rather than an exact count, for the same reason listDocs is: adding
+  // a chapter or a lab should not be a smoke-test failure.
+  record('renderer mounted', chapters >= 28, `${chapters} nav entries in the sidebar`)
 
   // The app now opens on the cornering diagram, so check that specifically:
   // the slip-angle labels, the plain-language verdict, and the car itself.
@@ -862,6 +864,140 @@ app.whenReady().then(async () => {
     L.damper['Jacking down'] === 'clear' && L.jacking['Jacking down'] === 'at risk' && !L.nan,
     `rebound time constant ${L.damper['Rebound time constant']} -> ${L.jacking['Rebound time constant']}`
   )
+
+  // Phase 2: telemetry and the overlay. This is the block that most needs a real
+  // Electron process rather than a browser -- the overlay is a second
+  // BrowserWindow with window flags that only exist here, and the whole
+  // telemetry pipeline runs in the main process.
+  const tel = await js(`(async () => {
+    const waitFor = async (test, ms = 15000) => {
+      const deadline = Date.now() + ms
+      while (Date.now() < deadline) {
+        try { const v = await test(); if (v) return v } catch { /* not ready */ }
+        await new Promise(r => setTimeout(r, 120))
+      }
+      return null
+    }
+    const item = [...document.querySelectorAll('.nav-item')].find(e => e.textContent.includes('iRacing Telemetry'))
+    if (!item) throw new Error('telemetry nav entry missing')
+    item.click()
+    await new Promise(r => setTimeout(r, 600))
+
+    const before = await window.rcvd.getOverlayConfig()
+
+    // Turn the overlay on and give it settings that are easy to assert on.
+    const applied = await window.rcvd.setOverlayConfig({
+      enabled: true, width: 360, height: 300, textScale: 1.4, opacity: 0.6, locked: true
+    })
+
+    // Values that must be clamped rather than accepted.
+    const clamped = await window.rcvd.setOverlayConfig({ width: 5, opacity: 0, textScale: 99 })
+    await window.rcvd.setOverlayConfig({ width: 360, opacity: 0.6, textScale: 1.4 })
+
+    // Drive the synthetic source and wait for readings to arrive.
+    await window.rcvd.selectSource('synthetic')
+    const withData = await waitFor(async () => {
+      const st = await window.rcvd.telemetryState()
+      return st && st.reading && st.samplesSeen > 30 ? st : null
+    })
+
+    return { before, applied, clamped, withData }
+  })()`)
+
+  record(
+    'overlay config round-trips through IPC',
+    tel.applied && tel.applied.enabled === true && tel.applied.width === 360 &&
+      Math.abs(tel.applied.opacity - 0.6) < 1e-9 && Math.abs(tel.applied.textScale - 1.4) < 1e-9,
+    `${tel.applied?.width}x${tel.applied?.height}, ${tel.applied?.opacity} opacity, ${tel.applied?.textScale}x text`
+  )
+  record(
+    'overlay config clamps values that would make it unusable',
+    tel.clamped && tel.clamped.width >= 180 && tel.clamped.opacity >= 0.15 &&
+      tel.clamped.textScale <= 2.5,
+    `asked for 5px / 0 opacity / 99x text, got ${tel.clamped?.width}px / ${tel.clamped?.opacity} / ${tel.clamped?.textScale}x`
+  )
+
+  // The overlay window itself -- flags that exist only in a real Electron run.
+  await settle(900)
+  const overlayWin = BrowserWindow.getAllWindows().find((w) => w !== win)
+  record(
+    'overlay opens as a second window',
+    !!overlayWin,
+    overlayWin ? `${overlayWin.getBounds().width}x${overlayWin.getBounds().height}` : 'not created'
+  )
+
+  if (overlayWin) {
+    const b = overlayWin.getBounds()
+    record(
+      'overlay is transparent, frameless and always on top',
+      overlayWin.isAlwaysOnTop() && !overlayWin.isResizable(),
+      `alwaysOnTop=${overlayWin.isAlwaysOnTop()}, resizable=${overlayWin.isResizable()}`
+    )
+    record(
+      'overlay honours the configured size and opacity',
+      b.width === 360 && b.height === 300 && Math.abs(overlayWin.getOpacity() - 0.6) < 0.02,
+      `${b.width}x${b.height} at ${overlayWin.getOpacity().toFixed(2)} opacity`
+    )
+
+    if (overlayWin.webContents.isLoading()) {
+      await new Promise((r) => overlayWin.webContents.once('did-finish-load', r))
+    }
+    await settle(900)
+    const painted = await overlayWin.webContents.executeJavaScript(`(() => {
+      const c = document.getElementById('canvas')
+      if (!c) return { ok: false, why: 'no canvas' }
+      const ctx = c.getContext('2d')
+      const d = ctx.getImageData(0, 0, c.width, c.height).data
+      let lit = 0
+      for (let i = 3; i < d.length; i += 4) if (d[i] > 8) lit++
+      return { ok: lit > 500, lit, w: c.width, h: c.height, bridge: typeof window.rcvdOverlay }
+    })()`)
+    record(
+      'overlay renderer paints to its canvas',
+      painted.ok && painted.bridge === 'object',
+      `${painted.lit} lit pixels on ${painted.w}x${painted.h}, bridge ${painted.bridge}`
+    )
+
+    // The overlay must not be able to reach the filesystem: it receives only.
+    const overlaySealed = await overlayWin.webContents.executeJavaScript(
+      "typeof window.rcvd === 'undefined' && typeof window.rcvdOverlay.onReading === 'function'"
+    )
+    record(
+      'overlay preload exposes receive-only capability',
+      overlaySealed === true,
+      'no window.rcvd in the overlay; only the three listeners'
+    )
+  }
+
+  record(
+    'telemetry pipeline produces readings from a source',
+    tel.withData && tel.withData.samplesSeen > 30 && !!tel.withData.reading,
+    tel.withData
+      ? `${tel.withData.samplesSeen} samples, balance "${tel.withData.reading.text}", usage ${(tel.withData.reading.usage * 100).toFixed(0)}%`
+      : 'no readings arrived'
+  )
+  record(
+    'telemetry derives slip angles the app can use',
+    tel.withData &&
+      Number.isFinite(tel.withData.reading.state.alphaFront) &&
+      Number.isFinite(tel.withData.reading.state.alphaRear) &&
+      Math.abs(tel.withData.reading.state.alphaFront) < 1,
+    tel.withData
+      ? `front ${(tel.withData.reading.state.alphaFront * 57.3).toFixed(2)} deg, rear ${(tel.withData.reading.state.alphaRear * 57.3).toFixed(2)} deg`
+      : ''
+  )
+  record(
+    'telemetry starts with a modelled limit and says so',
+    tel.withData && tel.withData.limits.front.source === 'model' && tel.withData.reading.provisional,
+    tel.withData
+      ? `front peak ${(tel.withData.limits.front.peakSlipAngle * 57.3).toFixed(2)} deg from the ${tel.withData.limits.front.source}`
+      : ''
+  )
+
+  // Put it back, so the smoke run does not leave an overlay enabled.
+  await js("window.rcvd.setOverlayConfig({ enabled: false })")
+  await js("window.rcvd.stopTelemetry()")
+  await settle(400)
 
   // Aerodynamics and the g-g envelope. The claim worth checking is that
   // downforce actually reaches the vehicle model rather than sitting in its own

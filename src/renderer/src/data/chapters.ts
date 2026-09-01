@@ -23,6 +23,7 @@ export type LabId =
   | 'compliance'
   | 'tireData'
   | 'damper'
+  | 'telemetry'
 
 export interface Chapter {
   /** Chapter number, or 0 for the course overview. */
@@ -67,6 +68,14 @@ export const CHAPTERS: Chapter[] = [
     part: 'Start here',
     lab: 'glossary',
     blurb: 'Every term in English and Brazilian Portuguese, searchable.'
+  },
+  {
+    n: 0,
+    title: 'iRacing Telemetry',
+    file: '00-course-overview.md',
+    part: 'Start here',
+    lab: 'telemetry',
+    blurb: 'Live slip angles and a driving-aid overlay, from the simulator.'
   },
   { n: 0, title: 'Course Overview', file: '00-course-overview.md', part: 'Start here' },
 

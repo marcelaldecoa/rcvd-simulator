@@ -26,6 +26,16 @@ export interface TelemetrySample {
   yawRate: number
   /** Road-wheel steer angle, rad. */
   steer: number
+  /**
+   * Lateral velocity in the body frame, m/s. Positive to the left.
+   *
+   * Optional because not every source has it, but strongly preferred when it
+   * does: sideslip is the one channel that cannot be reconstructed accurately
+   * without it. The alternative -- integrating beta_dot = Ay/V - r -- drifts,
+   * because any bias in Ay or r accumulates without bound. iRacing publishes
+   * this directly as VelocityY, so on the live source it is always present.
+   */
+  lateralVelocity?: number
   /** Throttle, 0-1. */
   throttle: number
   /** Brake, 0-1. */
