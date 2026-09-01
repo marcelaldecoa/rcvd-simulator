@@ -50,8 +50,11 @@ export interface IbtFile {
   vars: VarHeader[]
   sessionInfo: string
   samples: TelemetrySample[]
-  /** The ratio used, and whether it was given or inferred. */
+  /** The ratio used. */
   steeringRatio: number
+  /** Where it came from, which is worth showing rather than assuming. */
+  steeringRatioSource: 'session file' | 'supplied' | 'inferred'
+  /** Kept for callers that only care whether it was measured or guessed. */
   steeringRatioInferred: boolean
 }
 
@@ -86,11 +89,27 @@ export function parseIbt(buf: Buffer, opts: IbtOptions = {}): IbtFile {
   const step = Math.max(1, Math.round(opts.decimate ?? 1))
 
   // The ratio has to be settled before mapping, because it divides the steer
-  // channel. When it is not supplied, map once with a ratio of 1 to get raw
-  // handwheel angles, infer from those, then map properly.
-  let ratio = opts.steeringRatio ?? 0
-  let inferred = false
-  if (!(ratio > 0)) {
+  // channel -- and getting it wrong scales every front slip angle while
+  // leaving the rear untouched, which looks like a tyre difference rather than
+  // a units error.
+  //
+  // Precedence, and the first one is the one that used to be missing: the
+  // SESSION FILE knows what car was driven. A ratio configured elsewhere in the
+  // app describes the garage car, which may be a different car entirely, and
+  // letting it override the file silently corrupts the identification.
+  const published = /^\s*DriverCarSteeringRatio:\s*([\d.]+)/m.exec(sessionInfo)
+  let ratio = 0
+  let source: IbtFile['steeringRatioSource'] = 'inferred'
+
+  if (published && Number(published[1]) > 0) {
+    ratio = Number(published[1])
+    source = 'session file'
+  } else if ((opts.steeringRatio ?? 0) > 0) {
+    ratio = opts.steeringRatio as number
+    source = 'supplied'
+  } else {
+    // Nothing declared: map once with a ratio of 1 to get raw handwheel
+    // angles, infer from those, then map properly.
     const raw: TelemetrySample[] = []
     for (let i = 0; i < count; i += Math.max(step, 4)) {
       const at = dataOffset + i * stride
@@ -98,7 +117,7 @@ export function parseIbt(buf: Buffer, opts: IbtOptions = {}): IbtFile {
     }
     const guess = opts.wheelbase ? inferSteeringRatio(raw, opts.wheelbase) : null
     ratio = guess ?? 12
-    inferred = true
+    source = 'inferred'
   }
 
   const samples: TelemetrySample[] = []
@@ -124,7 +143,8 @@ export function parseIbt(buf: Buffer, opts: IbtOptions = {}): IbtFile {
     sessionInfo,
     samples,
     steeringRatio: ratio,
-    steeringRatioInferred: inferred
+    steeringRatioSource: source,
+    steeringRatioInferred: source === 'inferred'
   }
 }
 
@@ -204,9 +224,8 @@ export class IbtSource implements TelemetrySource {
       this.file = parseIbt(buf, this.opts)
       this.detail =
         `${this.file.samples.length} samples, ${this.file.vars.length} channels` +
-        (this.file.steeringRatioInferred
-          ? `, steering ratio inferred as ${this.file.steeringRatio.toFixed(1)}:1`
-          : '')
+        `, steering ratio ${this.file.steeringRatio.toFixed(1)}:1 ` +
+        `(${this.file.steeringRatioSource})`
       this.cursor = 0
     } catch (e) {
       this.detail = `could not read the file (${e instanceof Error ? e.message : String(e)})`

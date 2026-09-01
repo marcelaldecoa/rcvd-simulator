@@ -42,6 +42,8 @@ import {
   type DamperCurve
 } from '@core/vehicle/damper.js'
 import { deriveRates, rideRate, wheelRate } from '@core/vehicle/rates.js'
+import { allCorners, readHistogram, type HistogramSet } from '@telemetry/histogram.js'
+import type { TelemetrySample } from '@telemetry/types.js'
 import { deriveChassis } from '@core/vehicle/chassis.js'
 
 /** Ch 22 §3.3's velocity bands, which is where each mode actually lives. */
@@ -57,6 +59,9 @@ export function DamperLab(): React.JSX.Element {
   const [rearScale, setRearScale] = useState(0.55)
   const [rollTime, setRollTime] = useState(0.3)
   const [loadSwing, setLoadSwing] = useState(0.35)
+  /** A loaded session, for the velocity histogram. Empty until one is opened. */
+  const [session, setSession] = useState<TelemetrySample[]>([])
+  const [histogram, setHistogram] = useState<HistogramSet | null>(null)
 
   const d = useMemo(() => deriveRates(rates), [rates])
   const dc = useMemo(() => deriveChassis(vehicle, chassis), [vehicle, chassis])
@@ -165,6 +170,59 @@ export function DamperLab(): React.JSX.Element {
   }, [staticCorner])
 
   const jack = jackingRisk(curve.lowSpeedRebound, krFront, 4)
+
+  /**
+   * Load a session for the histogram.
+   *
+   * Only available in the desktop app -- the file picker and the .ibt parser
+   * both live in the main process. In a browser this button is simply absent.
+   */
+  const bridge = (window as unknown as {
+    rcvd?: {
+      pickSessionFile?: () => Promise<string | null>
+      selectSource?: (c: unknown) => Promise<unknown>
+      telemetrySamples?: () => Promise<TelemetrySample[]>
+    }
+  }).rcvd
+  const canLoad = Boolean(bridge?.pickSessionFile)
+
+  const loadSession = async (): Promise<void> => {
+    if (!bridge?.pickSessionFile || !bridge.selectSource || !bridge.telemetrySamples) return
+    const path = await bridge.pickSessionFile()
+    if (!path) return
+    await bridge.selectSource({ file: path })
+    const samples = await bridge.telemetrySamples()
+    setSession(samples)
+    setHistogram(
+      allCorners(samples, {
+        installationRatio: rates.front.installationRatio,
+        lowSpeedBoundary: 0.05
+      })
+    )
+  }
+
+  const verdict = histogram ? readHistogram(histogram) : null
+  const lf = histogram?.corners.LF ?? null
+
+  /**
+   * The histogram drawn against the SAME velocity axis as the force curve.
+   *
+   * That overlay is the whole point of Ch 22 §4.3: the curve says what the
+   * damper would do at each velocity, the histogram says how often it is
+   * actually asked, and a knee placed where the car never goes is a setting
+   * with no effect.
+   */
+  const histogramSeries: Series[] = useMemo(() => {
+    if (!lf) return []
+    const peak = Math.max(...lf.bins.map((b) => b.fraction), 1e-9)
+    return [
+      {
+        name: 'Time spent at this wheel velocity (LF)',
+        color: '#ff9f4d',
+        points: lf.bins.map((b) => ({ x: b.velocity * 1000, y: (b.fraction / peak) * 100 }))
+      }
+    ]
+  }, [lf])
 
   const zetaVerdict =
     zeta >= 0.55 && zeta <= 0.85
@@ -615,6 +673,98 @@ export function DamperLab(): React.JSX.Element {
       </div>
 
       <div className="grid2">
+        <Panel
+          title="Which part of the curve does this circuit use?"
+          reference="Ch 22 §4.3"
+          right={
+            canLoad ? (
+              <div className="btn-row">
+                <button className="btn" onClick={() => void loadSession()}>
+                  Open a .ibt session…
+                </button>
+              </div>
+            ) : undefined
+          }
+          note={
+            <>
+              The chapter calls this the essential damper diagnostic. A force–velocity curve
+              has four adjustable regions and only some of them are being used on any given
+              track — so the histogram answers a question the curve alone cannot.
+            </>
+          }
+        >
+          {!canLoad ? (
+            <div className="panel-note" style={{ borderTop: 'none' }}>
+              Loading a session needs the desktop app: the file picker and the{' '}
+              <code>.ibt</code> parser both live in the main process.
+            </div>
+          ) : !lf ? (
+            <div className="panel-note" style={{ borderTop: 'none' }}>
+              Open a session above. If the car does not publish shock velocity channels the
+              histogram stays empty — not every car does, and that is an ordinary outcome
+              rather than an error.
+            </div>
+          ) : (
+            <>
+              <Chart
+                series={histogramSeries}
+                height={230}
+                xLabel="Wheel velocity (mm/s) — positive is bump"
+                yLabel="Time spent (% of the busiest bin)"
+                fmtX={(x) => x.toFixed(0)}
+                fmtY={(y) => y.toFixed(0)}
+                xBands={[
+                  { from: -50, to: 50, color: 'rgba(77,214,193,0.10)' }
+                ]}
+                vRules={[
+                  { value: curve.kneeVelocity * 1000, label: 'your knee', color: '#ffcc55' },
+                  { value: -curve.kneeVelocity * 1000, color: '#ffcc55', dashed: true }
+                ]}
+              />
+              <Readouts>
+                <Readout label="Samples" value={session.length.toLocaleString()} />
+                <Readout
+                  label="Below 50 mm/s"
+                  value={`${(lf.lowSpeedFraction * 100).toFixed(0)}%`}
+                  tone={lf.lowSpeedFraction > 0.9 ? 'ok' : 'warn'}
+                />
+                <Readout
+                  label="95th percentile"
+                  value={(Math.abs(lf.percentile(0.95)) * 1000).toFixed(0)}
+                  unit="mm/s"
+                />
+                <Readout label="Peak" value={(lf.peak * 1000).toFixed(0)} unit="mm/s" tone="danger" />
+                <Readout label="RMS" value={(lf.rms * 1000).toFixed(0)} unit="mm/s" />
+                <Readout
+                  label="Bump : rebound"
+                  value={`${(lf.bumpFraction * 100).toFixed(0)} : ${((1 - lf.bumpFraction) * 100).toFixed(0)}`}
+                />
+              </Readouts>
+              {verdict && (
+                <div style={{ padding: '0 12px 12px' }}>
+                  <Verdict
+                    headline={verdict.headline}
+                    tone={verdict.lowSpeedFraction > 0.9 ? 'ok' : verdict.lowSpeedFraction > 0.7 ? 'front' : 'rear'}
+                  >
+                    {verdict.detail}
+                  </Verdict>
+                </div>
+              )}
+              <div className="panel-note">
+                The yellow line is <strong>your knee</strong>, on the same axis. If it sits
+                where the histogram is empty, moving it changes nothing about how this car
+                behaves on this circuit — which is exactly the session Ch 22 says teams waste.
+                <br />
+                <br />
+                Note this is <strong>wheel</strong> velocity, not shock velocity. The
+                conversion is linear through the installation ratio ({rates.front.installationRatio.toFixed(2)}
+                ), and reading a histogram in the wrong one puts every band in the wrong place
+                while still looking entirely plausible.
+              </div>
+            </>
+          )}
+        </Panel>
+
         <Panel title="Try these" reference="guided">
           <TryThis experiments={experiments} />
         </Panel>

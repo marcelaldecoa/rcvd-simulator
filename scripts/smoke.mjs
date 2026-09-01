@@ -9,6 +9,7 @@
  *   npm run smoke
  */
 import { app, BrowserWindow } from 'electron'
+import { resolve } from 'node:path'
 
 // Importing the real main registers its whenReady handler before ours, so by
 // the time we run, its IPC handlers exist and its window has been created.
@@ -998,6 +999,109 @@ app.whenReady().then(async () => {
   await js("window.rcvd.setOverlayConfig({ enabled: false })")
   await js("window.rcvd.stopTelemetry()")
   await settle(400)
+
+  // Post-session analysis, driven through the REAL .ibt path.
+  //
+  // The session file is generated before this run by scripts/make-test-ibt.mts,
+  // in genuine iRacing layout, describing the app's own FORMULA_CAR. That is
+  // what makes these checks worth something: the identification is compared
+  // against stiffnesses we chose rather than merely checked for being finite.
+  const ibtPath = resolve('.smoke-session.ibt')
+  const post = await js(`(async () => {
+    const waitFor = async (test, ms = 20000) => {
+      const deadline = Date.now() + ms
+      while (Date.now() < deadline) {
+        try { const v = await test(); if (v) return v } catch { /* not ready */ }
+        await new Promise(r => setTimeout(r, 150))
+      }
+      return null
+    }
+    const item = [...document.querySelectorAll('.nav-item')].find(e => e.textContent.includes('iRacing Telemetry'))
+    item.click()
+    await new Promise(r => setTimeout(r, 500))
+
+    const state = await window.rcvd.selectSource({ file: ${JSON.stringify(ibtPath)} })
+    const samples = await waitFor(async () => {
+      const s = await window.rcvd.telemetrySamples()
+      return s && s.length > 1000 ? s : null
+    })
+    return { detail: state?.status?.detail ?? '', count: samples ? samples.length : 0 }
+  })()`)
+
+  record(
+    'a .ibt session loads through the real file path',
+    post.count > 10000,
+    `${post.count} samples — ${post.detail}`
+  )
+
+  // The analysis itself runs in the renderer against those samples, using the
+  // same modules the lab uses.
+  const analysis = await js(`(async () => {
+    const samples = await window.rcvd.telemetrySamples()
+    const mod = await import('/src/telemetry/identifyAxle.js').catch(() => null)
+    return { haveModule: !!mod, n: samples.length }
+  })()`).catch(() => ({ haveModule: false, n: 0 }))
+  void analysis
+
+  // Drive the lab's own panels instead, which is the honest end-to-end check:
+  // whatever the renderer computed is what a user would see.
+  await settle(1200)
+  const panels = await js(`(() => {
+    const read = () => Object.fromEntries([...document.querySelectorAll('.readout')].map(r => [
+      r.querySelector('.readout-label')?.textContent?.trim(),
+      r.querySelector('.readout-value')?.textContent?.trim()]))
+    const rows = [...document.querySelectorAll('table.data tbody tr')].map(r =>
+      [...r.children].map(c => c.textContent.trim()))
+    const useButton = [...document.querySelectorAll('.btn')].find(b => b.textContent.includes('Use this car'))
+    return {
+      readouts: read(),
+      segmentRows: rows.length,
+      useEnabled: useButton ? !useButton.disabled : null,
+      text: document.body.innerText,
+      nan: document.body.innerText.includes('NaN')
+    }
+  })()`)
+
+  const parseNum = (v) => parseFloat(String(v ?? 'NaN'))
+  record(
+    'identification recovers the car it was generated from',
+    Math.abs(parseNum(panels.readouts['C(f) measured']) - 105) < 2 &&
+      Math.abs(parseNum(panels.readouts['C(r) measured']) - 135) < 2,
+    `Cf ${panels.readouts['C(f) measured']}, Cr ${panels.readouts['C(r) measured']} vs true 105.0 / 135.0 kN/rad`
+  )
+  record(
+    'the two independent fits agree, and the cross-check says so',
+    /Cross-check passes/.test(panels.text) && panels.useEnabled === true,
+    `"Use this car" ${panels.useEnabled ? 'enabled' : 'disabled'}`
+  )
+  record(
+    'the fit reports itself well conditioned on a varied session',
+    parseNum(panels.readouts['Slip angle range']) > 0.5 && !panels.nan,
+    `${panels.readouts['Slip angle range']} deg of slip angle covered`
+  )
+  record(
+    'lap comparison finds the slow lap and ranks its segments',
+    panels.segmentRows >= 3,
+    `${panels.segmentRows} segments ranked`
+  )
+
+  // Writing the identified car into the garage must reach the other chapters.
+  const applied = await js(`(async () => {
+    const before = document.querySelector('.topbar')?.innerText ?? ''
+    const b = [...document.querySelectorAll('.btn')].find(x => x.textContent.includes('Use this car'))
+    if (!b || b.disabled) return { ok: false, why: 'button unavailable' }
+    b.click()
+    await new Promise(r => setTimeout(r, 700))
+    return { ok: true, before, after: document.querySelector('.topbar')?.innerText ?? '' }
+  })()`)
+  record(
+    'the identified car reaches the rest of the app',
+    applied.ok && /K\s/.test(applied.after),
+    applied.ok ? `topbar now reads ${applied.after.replace(/\s+/g, ' ').slice(0, 80)}` : applied.why
+  )
+
+  await js("window.rcvd.stopTelemetry()")
+  await settle(300)
 
   // Aerodynamics and the g-g envelope. The claim worth checking is that
   // downforce actually reaches the vehicle model rather than sitting in its own

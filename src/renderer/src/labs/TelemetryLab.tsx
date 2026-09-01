@@ -26,6 +26,19 @@ import {
   type Identification
 } from '@telemetry/identify.js'
 import type { TelemetrySample } from '@telemetry/types.js'
+import {
+  crossCheckIdentification,
+  identifyAxleStiffness,
+  type AxleIdentification
+} from '@telemetry/identifyAxle.js'
+import {
+  biggestSegments,
+  compareLaps,
+  describeSegment,
+  splitLaps,
+  type Lap,
+  type LapComparison
+} from '@telemetry/laps.js'
 
 interface OverlayConfig {
   enabled: boolean
@@ -81,6 +94,7 @@ const ZONE_TONE = { under: 'ok', at: 'warn', over: 'danger' } as const
 
 export function TelemetryLab(): React.JSX.Element {
   const vehicle = useGarage((s) => s.vehicle)
+  const setVehicle = useGarage((s) => s.setVehicle)
   const tire = useGarage((s) => s.tire)
   const rearTireScale = useGarage((s) => s.rearTireScale)
   const rearGripScale = useGarage((s) => s.rearGripScale)
@@ -91,6 +105,10 @@ export function TelemetryLab(): React.JSX.Element {
   const [file, setFile] = useState<string | null>(null)
   const [samples, setSamples] = useState<TelemetrySample[]>([])
   const [fit, setFit] = useState<Identification | null>(null)
+  const [axle, setAxle] = useState<AxleIdentification | null>(null)
+  const [laps, setLaps] = useState<Lap[]>([])
+  const [refLap, setRefLap] = useState<number | null>(null)
+  const [cmpLap, setCmpLap] = useState<number | null>(null)
 
   const api = bridge()
   const v = derive(vehicle)
@@ -109,6 +127,54 @@ export function TelemetryLab(): React.JSX.Element {
     return api.onTelemetry(setState)
   }, [api])
 
+  /**
+   * Analyse whenever a FILE source is active, rather than when the button in
+   * this lab happens to be clicked.
+   *
+   * Driving it from the click handler looked simpler and was quietly wrong: a
+   * session selected any other way -- restored at startup, opened from the
+   * damper lab, set over IPC -- left these panels blank with a source loaded
+   * and no explanation. Reacting to the state the main process reports means
+   * the analysis follows the data, whatever put it there.
+   */
+  useEffect(() => {
+    if (!api) return
+    if (state?.status.kind !== 'file' || !state.status.connected) return
+    if (samples.length > 0) return
+    let cancelled = false
+    void api.telemetrySamples().then((all) => {
+      if (cancelled || all.length === 0) return
+      setSamples(all)
+      setFit(identifyUndersteerGradient(all, { wheelbase: v.L }))
+      setAxle(
+        identifyAxleStiffness(all, {
+          geometry: { a: vehicle.a, b: vehicle.b, frontWeightFraction: v.frontWeightFraction },
+          weight: v.w
+        })
+      )
+      const found = splitLaps(all).filter((l) => l.complete)
+      setLaps(found)
+      // Default to the two quickest complete laps, which is what anyone opening
+      // a session wants to look at first.
+      const byTime = [...found].sort((a, b) => (a.time ?? 1e9) - (b.time ?? 1e9))
+      setRefLap(byTime[0]?.number ?? null)
+      setCmpLap(byTime[1]?.number ?? byTime[0]?.number ?? null)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [api, state?.status.kind, state?.status.connected, samples.length, v.L, v.w, v.frontWeightFraction, vehicle.a, vehicle.b])
+
+  /** Clear the analysis when the source goes away, so it cannot go stale. */
+  useEffect(() => {
+    if (state?.status.kind !== 'file' && samples.length > 0) {
+      setSamples([])
+      setFit(null)
+      setAxle(null)
+      setLaps([])
+    }
+  }, [state?.status.kind, samples.length])
+
   const patch = useCallback(
     (p: Partial<OverlayConfig>) => {
       if (!api) return
@@ -126,19 +192,16 @@ export function TelemetryLab(): React.JSX.Element {
         setFile(path)
         setSource('file')
         setState(await api.selectSource({ file: path }))
-        // A file source has the whole session at once, so it can do the work
-        // the overlay cannot afford: fit the car's actual understeer gradient.
-        const all = await api.telemetrySamples()
-        setSamples(all)
-        setFit(identifyUndersteerGradient(all, { wheelbase: v.L }))
         return
       }
       setSource(kind)
       setSamples([])
       setFit(null)
+      setAxle(null)
+      setLaps([])
       setState(await api.selectSource(kind))
     },
-    [api, v.L]
+    [api]
   )
 
   if (!api) {
@@ -162,6 +225,40 @@ export function TelemetryLab(): React.JSX.Element {
           color: '#4dd6c1',
           scatter: true,
           points: ggPoints(samples).filter((_, i) => i % Math.max(1, Math.floor(samples.length / 3000)) === 0)
+        }
+      ]
+    : []
+
+  const check = fit && axle ? crossCheckIdentification(fit.KDeg, axle) : null
+
+  const comparison: LapComparison | null = (() => {
+    if (refLap === null || cmpLap === null) return null
+    const a = laps.find((l) => l.number === refLap)
+    const b = laps.find((l) => l.number === cmpLap)
+    return a && b ? compareLaps(a, b) : null
+  })()
+
+  const deltaChart: Series[] = comparison
+    ? [
+        {
+          name: 'Cumulative delta (s) — climbing means losing',
+          color: '#ffcc55',
+          points: comparison.distance.map((d, i) => ({ x: d * 100, y: comparison.delta[i] }))
+        }
+      ]
+    : []
+
+  const speedChart: Series[] = comparison
+    ? [
+        {
+          name: `Lap ${refLap}`,
+          color: '#4dd6c1',
+          points: comparison.distance.map((d, i) => ({ x: d * 100, y: comparison.reference.speed[i] * 3.6 }))
+        },
+        {
+          name: `Lap ${cmpLap}`,
+          color: '#ff9f4d',
+          points: comparison.distance.map((d, i) => ({ x: d * 100, y: comparison.compared.speed[i] * 3.6 }))
         }
       ]
     : []
@@ -546,6 +643,101 @@ export function TelemetryLab(): React.JSX.Element {
           )}
         </Panel>
 
+        <Panel
+          title="This car, identified"
+          reference="Ch 5 §4 · Ch 7 §3"
+          note={
+            <>
+              A fitted K is <strong>one equation in two unknowns</strong> — any number of
+              (C<sub>f</sub>, C<sub>r</sub>) pairs produce it. Measured sideslip breaks the
+              degeneracy: with β known, each axle's slip angle is known separately, and
+              regressing its force against it recovers the two stiffnesses on their own.
+            </>
+          }
+        >
+          {!axle ? (
+            <div className="panel-note" style={{ borderTop: 'none' }}>
+              Open a <code>.ibt</code> session above. The fit needs sustained cornering below
+              the tyre's peak — a few laps of anything is plenty.
+            </div>
+          ) : (
+            <>
+              <Readouts>
+                <Readout label="C(f) measured" value={(axle.cf / 1000).toFixed(1)} unit="kN/rad" tone="front" />
+                <Readout label="C(r) measured" value={(axle.cr / 1000).toFixed(1)} unit="kN/rad" tone="rear" />
+                <Readout label="C(f) in the garage" value={(vehicle.cf / 1000).toFixed(1)} unit="kN/rad" />
+                <Readout label="C(r) in the garage" value={(vehicle.cr / 1000).toFixed(1)} unit="kN/rad" />
+                <Readout
+                  label="Front fit r²"
+                  value={Number.isNaN(axle.r2Front) ? 'undefined' : axle.r2Front.toFixed(3)}
+                  tone={axle.r2Front > 0.8 ? 'ok' : 'danger'}
+                />
+                <Readout
+                  label="Rear fit r²"
+                  value={Number.isNaN(axle.r2Rear) ? 'undefined' : axle.r2Rear.toFixed(3)}
+                  tone={axle.r2Rear > 0.8 ? 'ok' : 'danger'}
+                />
+                <Readout
+                  label="Slip angle range"
+                  value={toDeg(Math.min(axle.spreadFront, axle.spreadRear)).toFixed(2)}
+                  unit="deg"
+                  tone={axle.wellConditioned ? 'ok' : 'danger'}
+                />
+              </Readouts>
+              {!axle.wellConditioned && (
+                <div className="panel-note">
+                  <strong>Not enough spread to support this fit.</strong> The session covers
+                  only {toDeg(Math.min(axle.spreadFront, axle.spreadRear)).toFixed(2)}° of slip
+                  angle, which is close to a single operating point — and a line through the
+                  origin and one point is exact whatever the truth is. The stiffnesses above
+                  may well be right; they are simply not <em>evidence</em>.
+                  <br />
+                  <br />
+                  Drive a wider range of corners, or the same corners at more speeds, and this
+                  resolves itself.
+                </div>
+              )}
+              {check && (
+                <div className="panel-note">
+                  <strong>{check.agrees ? 'Cross-check passes.' : 'Cross-check FAILS.'}</strong>{' '}
+                  {check.detail}
+                  <br />
+                  <br />
+                  Two independent fits — steer against A<sub>y</sub>, and axle force against
+                  axle slip — sharing no arithmetic beyond the samples. Agreement is real
+                  evidence; disagreement means suspect the sideslip channel or the assumed
+                  weight distribution before trusting either number.
+                </div>
+              )}
+              <div className="btn-row" style={{ marginTop: 8 }}>
+                <button
+                  className="btn active"
+                  disabled={!check?.agrees || !axle.wellConditioned}
+                  onClick={() => setVehicle({ cf: axle.cf, cr: axle.cr })}
+                >
+                  Use this car everywhere
+                </button>
+              </div>
+              <div className="panel-note">
+                That writes the measured stiffnesses into the garage, so{' '}
+                <strong>every chapter runs on your car</strong> rather than on the preset —
+                the understeer budget, the Moment Method map, the pair analysis, all of it.
+                Mass and geometry stay as they are: telemetry does not publish them, and
+                guessing them would quietly corrupt everything downstream.
+                {(!check?.agrees || !axle.wellConditioned) && (
+                  <>
+                    <br />
+                    <br />
+                    Disabled while the fit is unsupported or the two routes disagree. Writing a
+                    number that failed its own checks into the garage would spread one bad
+                    measurement through twenty labs.
+                  </>
+                )}
+              </div>
+            </>
+          )}
+        </Panel>
+
         <Panel title="What the box is for, and what it is not">
           <Explain
             seeing={
@@ -581,6 +773,148 @@ export function TelemetryLab(): React.JSX.Element {
           />
         </Panel>
       </div>
+
+      {laps.length >= 2 && (
+        <div className="grid2">
+          <Panel
+            title="Where the time went"
+            reference="Ch 11"
+            right={
+              <div className="btn-row">
+                <select
+                  style={{ width: 'auto', fontSize: 11, padding: '2px 5px' }}
+                  value={refLap ?? ''}
+                  onChange={(e) => setRefLap(Number(e.target.value))}
+                >
+                  {laps.map((l) => (
+                    <option key={l.number} value={l.number}>
+                      Lap {l.number} — {l.time?.toFixed(3)} s
+                    </option>
+                  ))}
+                </select>
+                <select
+                  style={{ width: 'auto', fontSize: 11, padding: '2px 5px' }}
+                  value={cmpLap ?? ''}
+                  onChange={(e) => setCmpLap(Number(e.target.value))}
+                >
+                  {laps.map((l) => (
+                    <option key={l.number} value={l.number}>
+                      Lap {l.number} — {l.time?.toFixed(3)} s
+                    </option>
+                  ))}
+                </select>
+              </div>
+            }
+            note={
+              <>
+                Compared by <strong>distance</strong>, not by time. Two laps take different
+                times by definition, so the same clock reading is a different corner — the
+                only honest comparison is at the same point on the track.
+              </>
+            }
+          >
+            <Chart
+              series={deltaChart}
+              height={210}
+              xLabel="Distance around the lap (%)"
+              yLabel="Cumulative delta (s)"
+              zeroY={false}
+              fmtX={(x) => x.toFixed(0)}
+              fmtY={(y) => y.toFixed(2)}
+              hRules={[{ value: 0, color: '#3a4756' }]}
+            />
+            <div className="panel-note">
+              Read the <strong>slope</strong>, not the height. Where the line climbs, time is
+              being lost; a flat stretch means the two laps were equal there, however far
+              apart they already were.
+            </div>
+            <Chart
+              series={speedChart}
+              height={190}
+              xLabel="Distance around the lap (%)"
+              yLabel="Speed (km/h)"
+              zeroY={false}
+              fmtX={(x) => x.toFixed(0)}
+              fmtY={(y) => y.toFixed(0)}
+            />
+            {comparison && (
+              <Readouts>
+                <Readout
+                  label="Total"
+                  value={`${comparison.total >= 0 ? '+' : ''}${comparison.total.toFixed(3)}`}
+                  unit="s"
+                  tone={comparison.total > 0 ? 'danger' : 'ok'}
+                />
+                <Readout label="Complete laps" value={String(laps.length)} />
+              </Readouts>
+            )}
+          </Panel>
+
+          <Panel
+            title="The stretches that mattered"
+            note={
+              <>
+                A lap delta is usually a few places where something real happened plus a lot
+                of noise. These are the few.
+              </>
+            }
+          >
+            {comparison ? (
+              <table className="data">
+                <thead>
+                  <tr>
+                    <th>Where</th>
+                    <th>Delta</th>
+                    <th>Speed</th>
+                    <th>Lateral</th>
+                    <th>Steer</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {biggestSegments(comparison, 6).map((seg) => (
+                    <tr key={seg.from}>
+                      <td>
+                        {(seg.from * 100).toFixed(0)}–{(seg.to * 100).toFixed(0)}%
+                      </td>
+                      <td style={{ color: seg.delta > 0 ? 'var(--danger)' : 'var(--ok)' }}>
+                        {seg.delta >= 0 ? '+' : ''}
+                        {seg.delta.toFixed(3)} s
+                      </td>
+                      <td>
+                        {seg.speedDelta >= 0 ? '+' : ''}
+                        {seg.speedDelta.toFixed(1)} m/s
+                      </td>
+                      <td>
+                        {seg.ayDelta >= 0 ? '+' : ''}
+                        {seg.ayDelta.toFixed(2)} g
+                      </td>
+                      <td>
+                        {seg.steerDelta >= 0 ? '+' : ''}
+                        {toDeg(seg.steerDelta).toFixed(1)}°
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className="panel-note" style={{ borderTop: 'none' }}>
+                Pick two laps above.
+              </div>
+            )}
+            <div className="panel-note">
+              {comparison && biggestSegments(comparison, 1)[0]
+                ? describeSegment(biggestSegments(comparison, 1)[0])
+                : ''}
+              <br />
+              <br />
+              Deliberately cautious about causes. Telemetry can say a corner was slower and
+              that more lock was used through it. It <em>cannot</em> say the car understeered
+              — that is a different claim, and Ch 11's discipline about confounders applies to
+              reading data as much as to running a test.
+            </div>
+          </Panel>
+        </div>
+      )}
     </div>
   )
 }

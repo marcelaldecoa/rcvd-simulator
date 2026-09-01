@@ -274,29 +274,74 @@ describe('checking the sign conventions against the data', () => {
 })
 
 describe('inferring the steering ratio from data', () => {
-  it('recovers a known ratio from gentle cornering', () => {
-    // At low lateral acceleration the car is near Ackermann, so handwheel
-    // angle over L*r/V is the ratio.
-    const L = 3
-    const ratio = 14
-    const samples = Array.from({ length: 400 }, (_, i) => {
-      const r = 0.02 + (i % 40) * 0.002
-      const speed = 30
-      const ackermann = (L * r) / speed
-      return {
-        t: i / 60,
-        speed,
-        ax: 0,
-        ay: 1.0,
-        yawRate: r,
-        steer: ackermann * ratio,
-        throttle: 0.3,
-        brake: 0,
-        lapDistPct: 0,
-        lap: 1
+  const L = 3
+  const RATIO = 14
+  const K_RAD_PER_G = 0.02
+
+  /**
+   * Handwheel = G(L/R) + G K Ay -- a car with real understeer, not a kinematic
+   * one. Corners are specified by the lateral acceleration they are taken at,
+   * so the session actually spans the range the fit is entitled to work over.
+   */
+  const session = (speeds: number[], ayValues: number[]) => {
+    const out = []
+    let t = 0
+    for (const speed of speeds) {
+      for (const ay of ayValues) {
+        const R = (speed * speed) / (ay * 9.80665)
+        const yawRate = speed / R
+        const roadWheel = L / R + K_RAD_PER_G * ay
+        for (let i = 0; i < 20; i++) {
+          out.push({
+            t: (t += 1 / 60),
+            speed,
+            ax: 0,
+            ay: ay * 9.80665,
+            yawRate,
+            steer: roadWheel * RATIO,
+            throttle: 0.3,
+            brake: 0,
+            lapDistPct: 0,
+            lap: 1
+          })
+        }
       }
-    })
-    expect(inferSteeringRatio(samples, L)).toBeCloseTo(ratio, 1)
+    }
+    return out
+  }
+
+  it('recovers a known ratio from a car that actually understeers', () => {
+    // The two-regressor fit separates the ratio from the understeer term, so
+    // it is right even when the corners are not gentle.
+    const samples = session([30, 45, 60], [0.2, 0.35, 0.5, 0.65])
+    expect(inferSteeringRatio(samples, L)).toBeCloseTo(RATIO, 4)
+  })
+
+  it('is NOT fooled by the understeer term, which a one-regressor fit is', () => {
+    // The bug this replaced. Regressing handwheel on the Ackermann term alone
+    // absorbs the understeer contribution into the one coefficient and returns
+    // a ratio that is too large -- which scales every steer angle, leaves the
+    // REAR axle identification perfect and the front wrong, and looks like a
+    // tyre difference rather than a units error.
+    const samples = session([30, 45, 60], [0.2, 0.35, 0.5, 0.65])
+    let sxy = 0
+    let sxx = 0
+    for (const s of samples) {
+      const ack = (L * s.yawRate) / s.speed
+      sxy += s.steer * ack
+      sxx += ack * ack
+    }
+    const naive = sxy / sxx
+    expect(naive).toBeGreaterThan(RATIO * 1.05)
+    expect(inferSteeringRatio(samples, L)).toBeCloseTo(RATIO, 4)
+  })
+
+  it('declines when the two regressors cannot be separated', () => {
+    // Every corner at the same radius and speed makes the Ackermann term and
+    // Ay proportional, so no fit can tell the ratio from the understeer. That
+    // is a real limitation and it says so rather than returning the biased
+    // answer.
+    expect(inferSteeringRatio(session([40], [0.5]), L)).toBeNull()
   })
 
   it('declines rather than guessing when there is too little data', () => {
@@ -345,9 +390,36 @@ describe('.ibt session files', () => {
     expect(f.samples).toHaveLength(30)
   })
 
-  it('infers the steering ratio when none is given', () => {
+  it('prefers the ratio the SESSION FILE declares over anything supplied', () => {
+    // The file knows what car was driven. A ratio configured elsewhere in the
+    // app describes the garage car, which may be a different car entirely --
+    // and letting it win silently scales every front slip angle while leaving
+    // the rear alone, which reads as a tyre difference rather than a units
+    // error.
+    const withRatio = buildSession({
+      n: 40,
+      speed: 40,
+      yawRate: 0.3,
+      latAccel: 12,
+      handwheel: 0.6,
+      asFile: true,
+      sessionInfo: 'DriverInfo:\n DriverCarSteeringRatio: 14.5\n'
+    })
+    const f = parseIbt(withRatio, { steeringRatio: 9, wheelbase: 3 })
+    expect(f.steeringRatio).toBeCloseTo(14.5, 6)
+    expect(f.steeringRatioSource).toBe('session file')
+  })
+
+  it('falls back to a supplied ratio when the file declares none', () => {
+    const f = parseIbt(buf, { steeringRatio: 9, wheelbase: 3 })
+    expect(f.steeringRatio).toBeCloseTo(9, 6)
+    expect(f.steeringRatioSource).toBe('supplied')
+  })
+
+  it('infers only when nothing at all is declared', () => {
     const f = parseIbt(buf, { wheelbase: 3 })
     expect(f.steeringRatioInferred).toBe(true)
+    expect(f.steeringRatioSource).toBe('inferred')
     expect(f.steeringRatio).toBeGreaterThan(0)
   })
 
