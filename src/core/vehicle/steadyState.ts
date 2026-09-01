@@ -355,6 +355,15 @@ export function basicBudgetLine(v: BicycleVehicle): BudgetLine {
   }
 }
 
+/**
+ * The budget's six rows with only the one Ch 5 can fill in.
+ *
+ * Kept for the linear-model case, where a vehicle is all there is: the other
+ * five rows need a suspension, a roll gradient and a pair of tyres, none of
+ * which a `BicycleVehicle` carries. `understeerBudget` in `understeerBudget.ts`
+ * fills them; this exists so the shape of the table is visible from Ch 5 alone,
+ * with the empty rows naming what the later chapters owe it.
+ */
 export function defaultBudget(v: BicycleVehicle): BudgetLine[] {
   return [
     basicBudgetLine(v),

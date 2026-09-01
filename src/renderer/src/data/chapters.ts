@@ -15,6 +15,7 @@ export type LabId =
   | 'formulas'
   | 'aero'
   | 'gg'
+  | 'mmm'
 
 export interface Chapter {
   /** Chapter number, or 0 for the course overview. */
@@ -116,7 +117,7 @@ export const CHAPTERS: Chapter[] = [
     title: 'Force-Moment Analysis',
     file: 'ch08-force-moment-analysis.md',
     part: 'Part I — Fundamentals',
-    blurb: 'The MRA Moment Method carpet plot over the (β, δ) plane.'
+    lab: 'mmm'
   },
   {
     n: 9,

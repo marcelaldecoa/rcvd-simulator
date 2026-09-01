@@ -106,6 +106,7 @@ Symbols follow the book's notation. | Os símbolos seguem a notação do livro.
 | Understeer gradient | Gradiente de subesterço | $K$ | deg/g ou rad/g |
 | Cornering compliance | Complacência em curva | $D_f$, $D_r$ | Bundorf; $K = D_f - D_r$ |
 | Understeer budget | Balanço de subesterço | — | Decomposição de $K$ por mecanismo |
+| Roll understeer / roll oversteer | Subesterço / sobre-esterço por rolagem | — | Esterçamento do eixo em rolagem; no traseiro, estabiliza |
 | Steer angle (road wheel) | Ângulo de esterçamento da roda | $\delta$ | |
 | Steering wheel angle | Ângulo do volante | — | |
 | Steering ratio | Relação de direção | $G_s$ | |
@@ -121,6 +122,8 @@ Symbols follow the book's notation. | Os símbolos seguem a notação do livro.
 | Neutral steer point | Ponto de esterço neutro | — | |
 | Static margin | Margem estática | — | Distância CG→NSP, em % do entre-eixos |
 | Stability derivative | Derivada de estabilidade | $N_\beta$, $Y_\beta$… | Herança da estabilidade de aeronaves |
+| Stability (Moment Method) | Estabilidade (Método dos Momentos) | $\partial N/\partial A_y$ | A $\delta$ constante; negativa = estável |
+| Control (Moment Method) | Controle (Método dos Momentos) | $\partial N/\partial\delta$ | A $A_y$ constante; $K \propto$ −estabilidade/controle |
 | Directional stability | Estabilidade direcional | $N_\beta$ | "Estabilidade de cata-vento" |
 | Balance | Equilíbrio / balanço | — | ⚑ "balance" é comum no paddock |
 | Limit | Limite | — | |
@@ -198,6 +201,7 @@ Symbols follow the book's notation. | Os símbolos seguem a notação do livro.
 | Camber curve / camber gain | Curva de cambagem / ganho de cambagem | — | |
 | Bump steer | Esterçamento por curso da suspensão | — | ⚑ usa-se em inglês |
 | Roll steer | Esterçamento por rolagem | — | |
+| Roll camber | Cambagem por rolagem | — | Cambagem ganha em relação ao solo por grau de rolagem |
 | Anti-dive / anti-squat | Anti-mergulho / anti-agachamento | — | |
 | Compliance | Complacência | — | "Flexibilidade" estrutural |
 | Compliance steer | Esterçamento por complacência | — | |
@@ -272,6 +276,11 @@ Symbols follow the book's notation. | Os símbolos seguem a notação do livro.
 | Telemetry | Telemetria | — | |
 | Data acquisition | Aquisição de dados | — | ⚑ "data logging" |
 | Moment Method | Método dos Momentos | — | Abrev. MMM / MRA; diagrama $N$ vs $A_y$ |
+| Trim point | Ponto de equilíbrio | $N = 0$ | ⚑ "trim"; estado que o carro consegue manter |
+| Trim line | Linha de equilíbrio | $N = 0$ | Todos os pontos de equilíbrio do diagrama MMM |
+| Trimmed lateral acceleration | Aceleração lateral em equilíbrio | — | O que o carro sustenta, não o que ele gera |
+| Constrained testing | Ensaio com vínculo | — | Carro impedido de fazer o que faria; medem-se as reações |
+| Yaw acceleration | Aceleração de guinada | $\dot r = N/I_{zz}$ | Taxa com que o carro deixa o estado observado |
 | Constant radius test | Ensaio de raio constante | — | |
 | Step input | Entrada em degrau | — | |
 | A-B-A testing | Ensaio A-B-A | — | Protocolo de comparação |

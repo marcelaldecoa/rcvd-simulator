@@ -29,16 +29,20 @@ import { scaleTire } from '@core/tire/scale.js'
 import { VEHICLE_PRESETS, derive } from '@core/vehicle/params.js'
 import {
   axleLimits,
-  basicBudgetLine,
   constantRadiusSweep,
-  defaultBudget,
   nonlinearConstantRadiusSweep,
   responseAtSpeed,
   speedSweep,
-  sumBudget,
   summarise,
   trimFromSteer
 } from '@core/vehicle/steadyState.js'
+import {
+  FORMULA_COMPLIANCE,
+  NO_COMPLIANCE,
+  SEDAN_COMPLIANCE,
+  budgetShares,
+  understeerBudget
+} from '@core/vehicle/understeerBudget.js'
 import { G, toDeg } from '@core/util/numeric.js'
 
 const RADIUS = 60 // m, a typical skid pad
@@ -53,6 +57,9 @@ export function SteadyStateLab(): React.JSX.Element {
   const speed = useGarage((s) => s.speed)
   const setSpeed = useGarage((s) => s.setSpeed)
   const syncStiffness = useGarage((s) => s.syncStiffnessFromTire)
+  const chassis = useGarage((s) => s.chassis)
+  const compliance = useGarage((s) => s.compliance)
+  const setCompliance = useGarage((s) => s.setCompliance)
 
   const d = derive(vehicle)
   const s = summarise(vehicle)
@@ -74,6 +81,8 @@ export function SteadyStateLab(): React.JSX.Element {
 
   /** Lateral acceleration the picture and the trim readouts are taken at. */
   const [trimAy, setTrimAy] = useState(0.5)
+  /** Lateral acceleration the budget's two aligning-torque rows are evaluated at. */
+  const [budgetAy, setBudgetAy] = useState(0.5)
   const limits = useMemo(
     () => axleLimits(vehicle, tireFront, tireRear),
     [vehicle, tireFront, tireRear]
@@ -179,11 +188,35 @@ export function SteadyStateLab(): React.JSX.Element {
   )
 
   // --- Understeer budget --------------------------------------------------
-  const budget = useMemo(() => {
-    const lines = defaultBudget(vehicle)
-    lines[0] = basicBudgetLine(vehicle)
-    return sumBudget(lines)
-  }, [vehicle])
+  // All six rows, live. Five of them need chapters this one has not reached
+  // yet, which is the honest situation: Ch 5 defines the table and Ch 2, 17, 19
+  // and 23 fill it in.
+  const budget = useMemo(
+    () =>
+      understeerBudget({
+        vehicle,
+        chassis,
+        tireFront,
+        tireRear,
+        compliance,
+        ay: budgetAy
+      }),
+    [vehicle, chassis, tireFront, tireRear, compliance, budgetAy]
+  )
+  const shares = useMemo(() => budgetShares(budget), [budget])
+  const bareK = useMemo(
+    () =>
+      understeerBudget({
+        vehicle,
+        chassis,
+        tireFront,
+        tireRear,
+        compliance: NO_COMPLIANCE,
+        ay: budgetAy,
+        ignorePneumaticTrail: true
+      }).K,
+    [vehicle, chassis, tireFront, tireRear, budgetAy]
+  )
 
   const trim = trimFromSteer(
     vehicle,
@@ -548,15 +581,44 @@ export function SteadyStateLab(): React.JSX.Element {
 
           <Panel
             title="Understeer budget"
-            reference="Ch 5 §4.1"
+            reference="Ch 5 §4.1 · Ch 2, 17, 19, 23"
+            right={
+              <ButtonRow
+                options={[
+                  { value: 'formula', label: 'Race car' },
+                  { value: 'sedan', label: 'Road car' },
+                  { value: 'none', label: 'Ideal' }
+                ]}
+                value={
+                  compliance.front.aligningComplianceSteer ===
+                  SEDAN_COMPLIANCE.front.aligningComplianceSteer
+                    ? 'sedan'
+                    : compliance.front.aligningComplianceSteer === 0
+                      ? 'none'
+                      : 'formula'
+                }
+                onChange={(v) => {
+                  const pick =
+                    v === 'sedan'
+                      ? SEDAN_COMPLIANCE
+                      : v === 'none'
+                        ? NO_COMPLIANCE
+                        : FORMULA_COMPLIANCE
+                  setCompliance('front', pick.front)
+                  setCompliance('rear', pick.rear)
+                }}
+              />
+            }
             note={
               <>
                 The contributions to cornering compliance are additive, so they can be
-                tabulated and summed by mechanism. The weight/stiffness term is computed
-                live; the remaining rows are populated by the Part II labs as those
-                chapters are built, which is exactly how the budget is meant to be
-                assembled. It tells you not just <em>that</em> a car understeers but{' '}
-                <em>which mechanism</em> is responsible.
+                tabulated and summed <em>by mechanism</em>. That is what turns "the car
+                understeers" into a plan: the last column says which chapter to go and
+                read, and the bar says how much of the answer is sitting in that row.
+                <br />
+                <br />
+                Chapter 5 can only fill in the first line. The other five are the reason
+                Part II exists.
               </>
             }
           >
@@ -566,15 +628,33 @@ export function SteadyStateLab(): React.JSX.Element {
                   <th>Mechanism</th>
                   <th>Front</th>
                   <th>Rear</th>
+                  <th>Share of K</th>
                   <th>Ch</th>
                 </tr>
               </thead>
               <tbody>
-                {budget.lines.map((l) => (
+                {budget.lines.map((l, i) => (
                   <tr key={l.mechanism}>
                     <td>{l.mechanism}</td>
                     <td>{l.front.toFixed(3)}</td>
                     <td>{l.rear.toFixed(3)}</td>
+                    <td>
+                      <span
+                        style={{
+                          display: 'inline-block',
+                          height: 7,
+                          width: `${Math.round(shares[i].share * 100)}%`,
+                          minWidth: shares[i].share > 0.002 ? 2 : 0,
+                          background: shares[i].k >= 0 ? 'var(--accent)' : 'var(--danger)',
+                          verticalAlign: 'middle',
+                          marginRight: 5
+                        }}
+                      />
+                      <span style={{ color: 'var(--text-faint)', fontSize: 10 }}>
+                        {shares[i].k >= 0 ? '+' : '−'}
+                        {Math.round(shares[i].share * 100)}%
+                      </span>
+                    </td>
                     <td style={{ color: 'var(--text-faint)', fontSize: 10 }}>{l.chapter}</td>
                   </tr>
                 ))}
@@ -582,17 +662,111 @@ export function SteadyStateLab(): React.JSX.Element {
                   <td style={{ color: 'var(--text)' }}>Df, Dr (deg/g)</td>
                   <td style={{ color: 'var(--front)' }}>{budget.Df.toFixed(3)}</td>
                   <td style={{ color: 'var(--rear)' }}>{budget.Dr.toFixed(3)}</td>
-                  <td />
+                  <td colSpan={2} />
                 </tr>
                 <tr className="total">
                   <td style={{ color: 'var(--text)' }}>K = Df − Dr</td>
                   <td colSpan={2} style={{ color: 'var(--accent)' }}>
                     {budget.K.toFixed(3)} deg/g
                   </td>
-                  <td />
+                  <td colSpan={2} style={{ color: 'var(--text-faint)', fontSize: 10 }}>
+                    Ch 5 alone says {bareK.toFixed(3)}
+                  </td>
                 </tr>
               </tbody>
             </table>
+
+            <Slider
+              label="Evaluate the budget at"
+              unit="g"
+              value={budgetAy}
+              min={0.1}
+              max={1.6}
+              step={0.05}
+              onChange={setBudgetAy}
+            />
+            <div className="panel-note">
+              The budget is a linear construction with two rows that are not. Pneumatic
+              trail collapses as the tyre saturates, so both aligning-torque rows{' '}
+              <strong>shrink as you slide this toward the limit</strong> — which is
+              part of why a car's K is not a constant, and why those rows shape the K(Ay)
+              curve rather than merely offsetting it.
+            </div>
+
+            <div className="grid2" style={{ marginTop: 4 }}>
+              <div>
+                <Slider
+                  label="Front roll camber"
+                  unit="deg/deg"
+                  value={compliance.front.rollCamber}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  onChange={(rollCamber) => setCompliance('front', { rollCamber })}
+                />
+                <Slider
+                  label="Front roll steer"
+                  unit="deg/deg"
+                  value={compliance.front.rollSteer}
+                  min={-0.2}
+                  max={0.2}
+                  step={0.005}
+                  digits={3}
+                  onChange={(rollSteer) => setCompliance('front', { rollSteer })}
+                />
+                <Slider
+                  label="Front steering compliance"
+                  unit="deg/kN·m"
+                  value={compliance.front.aligningComplianceSteer}
+                  min={0}
+                  max={1.6}
+                  step={0.02}
+                  onChange={(aligningComplianceSteer) =>
+                    setCompliance('front', { aligningComplianceSteer })
+                  }
+                />
+              </div>
+              <div>
+                <Slider
+                  label="Rear roll camber"
+                  unit="deg/deg"
+                  value={compliance.rear.rollCamber}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  onChange={(rollCamber) => setCompliance('rear', { rollCamber })}
+                />
+                <Slider
+                  label="Rear roll steer"
+                  unit="deg/deg"
+                  value={compliance.rear.rollSteer}
+                  min={-0.2}
+                  max={0.2}
+                  step={0.005}
+                  digits={3}
+                  onChange={(rollSteer) => setCompliance('rear', { rollSteer })}
+                />
+                <Slider
+                  label="Rear lateral compliance steer"
+                  unit="deg/kN"
+                  value={compliance.rear.lateralComplianceSteer}
+                  min={-0.08}
+                  max={0.08}
+                  step={0.002}
+                  digits={3}
+                  onChange={(lateralComplianceSteer) =>
+                    setCompliance('rear', { lateralComplianceSteer })
+                  }
+                />
+              </div>
+            </div>
+            <div className="panel-note">
+              Positive roll steer and positive compliance steer both mean{' '}
+              <strong>the axle steers itself into the turn</strong>. At the rear that is
+              stabilising — the rear roll understeer of Ch 19 §5, and the
+              rear-toe-in-under-load of Ch 23 §4. At the front the identical sign does the
+              opposite, because K is a <em>difference</em> between the two ends.
+            </div>
           </Panel>
         </div>
 
