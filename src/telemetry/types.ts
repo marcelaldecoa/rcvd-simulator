@@ -44,6 +44,16 @@ export interface TelemetrySample {
   lapDistPct: number
   /** Lap number. */
   lap: number
+  /**
+   * Absolute heading, rad, from the sim's own compass rather than integrated.
+   *
+   * This is what makes a reconstructed track map hold its shape. Integrating
+   * the yaw RATE accumulates error in the heading, which bends the whole map
+   * into a spiral; taking the heading directly leaves only position to
+   * integrate, and that closes with a single correction at the line. iRacing
+   * publishes it as YawNorth.
+   */
+  heading?: number
   /** Gear, 0 = neutral, -1 = reverse. */
   gear?: number
   /** Engine speed, rad/s. */
@@ -92,7 +102,13 @@ export interface SetupSnapshot {
   rideHeights?: [number, number, number, number]
 }
 
-export type SourceKind = 'live' | 'file' | 'synthetic'
+/**
+ * `none` is the service's state when nothing is selected, not a source anyone
+ * implements. It is in this union because the alternative -- reporting some
+ * arbitrary real source's name while that source is not running -- lights up
+ * the wrong button in the UI and makes the page contradict itself.
+ */
+export type SourceKind = 'live' | 'file' | 'synthetic' | 'none'
 
 export interface SourceStatus {
   kind: SourceKind

@@ -24,6 +24,7 @@ export type LabId =
   | 'tireData'
   | 'damper'
   | 'telemetry'
+  | 'dashboard'
 
 export interface Chapter {
   /** Chapter number, or 0 for the course overview. */
@@ -68,6 +69,14 @@ export const CHAPTERS: Chapter[] = [
     part: 'Start here',
     lab: 'glossary',
     blurb: 'Every term in English and Brazilian Portuguese, searchable.'
+  },
+  {
+    n: 0,
+    title: 'Session Dashboard',
+    file: '00-course-overview.md',
+    part: 'Start here',
+    lab: 'dashboard',
+    blurb: 'Your own session, measured, with a way through to the theory behind each number.'
   },
   {
     n: 0,

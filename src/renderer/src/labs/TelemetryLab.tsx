@@ -52,6 +52,12 @@ interface OverlayConfig {
   showDiagram: boolean
   showBars: boolean
   showNumbers: boolean
+  soundEnabled: boolean
+  soundVolume: number
+  soundKind: 'tone' | 'blip' | 'chirp'
+  soundFront: boolean
+  soundRear: boolean
+  soundThreshold: number
 }
 
 interface TelemetryState {
@@ -564,6 +570,82 @@ export function TelemetryLab(): React.JSX.Element {
             </>
           )}
         </Panel>
+
+        {config && (
+        <Panel
+          title="Audible warning"
+          reference="driving aid"
+          note={
+            <>
+              A cue as an axle approaches <em>its own</em> peak — the front one low, the rear one
+              high, so you can tell them apart without looking. It fires below the limit on
+              purpose: by the time the rear has let go your inner ear has already said so and a
+              speaker is late. The one worth having is the front, because understeer is
+              undramatic and easy to miss.
+              <br />
+              <br />
+              One cue per corner, never per frame, with a floor on how often it can repeat. An
+              alarm that goes off constantly stops being heard within a lap.
+            </>
+          }
+        >
+          <div className="btn-row">
+            <button
+              className={`btn${config.soundEnabled ? ' active' : ''}`}
+              onClick={() => patch({ soundEnabled: !config.soundEnabled })}
+            >
+              {config.soundEnabled ? 'Sound on' : 'Sound off'}
+            </button>
+            <button
+              className={`btn${config.soundFront ? ' active' : ''}`}
+              disabled={!config.soundEnabled}
+              onClick={() => patch({ soundFront: !config.soundFront })}
+            >
+              Front · understeer
+            </button>
+            <button
+              className={`btn${config.soundRear ? ' active' : ''}`}
+              disabled={!config.soundEnabled}
+              onClick={() => patch({ soundRear: !config.soundRear })}
+            >
+              Rear · oversteer
+            </button>
+          </div>
+
+          <div className="btn-row" style={{ marginTop: 8 }}>
+            {(['tone', 'blip', 'chirp'] as const).map((k) => (
+              <button
+                key={k}
+                className={`btn${config.soundKind === k ? ' active' : ''}`}
+                disabled={!config.soundEnabled}
+                onClick={() => patch({ soundKind: k })}
+              >
+                {k}
+              </button>
+            ))}
+          </div>
+
+          <Slider
+            label="Volume"
+            value={config.soundVolume}
+            min={0}
+            max={1}
+            step={0.05}
+            onChange={(v) => patch({ soundVolume: v })}
+            display={`${Math.round(config.soundVolume * 100)}%`}
+          />
+          <Slider
+            label="Warn at"
+            value={config.soundThreshold}
+            min={0.6}
+            max={0.98}
+            step={0.01}
+            onChange={(v) => patch({ soundThreshold: v })}
+            display={`${Math.round(config.soundThreshold * 100)}%`}
+            unit="of the axle's peak"
+          />
+        </Panel>
+        )}
 
         <Panel
           title="After the session"

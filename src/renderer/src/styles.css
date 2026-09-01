@@ -1529,3 +1529,169 @@ table.data tr.total td {
   align-items: center;
   display: flex;
 }
+
+/* ---- dashboard widgets ------------------------------------------------- */
+
+.widget-link {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 10px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
+.widget-link:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* The reference sits between the title and the link, so it takes the slack. */
+.panel-head .panel-ref + .widget-link {
+  margin-left: 0;
+}
+
+.widget-bar {
+  margin-bottom: 9px;
+}
+
+.widget-bar-label {
+  display: flex;
+  font-size: 11px;
+  justify-content: space-between;
+  margin-bottom: 3px;
+}
+
+.widget-bar-caption {
+  color: var(--text-faint);
+  font-family: var(--mono);
+}
+
+.widget-bar-track {
+  background: var(--bg-deep, rgba(0, 0, 0, 0.3));
+  border-radius: 3px;
+  height: 7px;
+  overflow: hidden;
+}
+
+.widget-bar-fill {
+  border-radius: 3px;
+  height: 100%;
+  transition: width 0.25s ease;
+}
+
+.widget-stack {
+  background: var(--bg-deep, rgba(0, 0, 0, 0.3));
+  border-radius: 3px;
+  display: flex;
+  height: 12px;
+  overflow: hidden;
+}
+
+.widget-legend {
+  color: var(--text-dim);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 10.5px;
+  gap: 12px;
+  margin-top: 7px;
+}
+
+.widget-legend i {
+  border-radius: 2px;
+  display: inline-block;
+  height: 8px;
+  margin-right: 4px;
+  width: 8px;
+}
+
+.sector-table {
+  border-collapse: collapse;
+  font-size: 11px;
+  width: 100%;
+}
+
+.sector-table th {
+  color: var(--text-faint);
+  font-weight: 500;
+  padding: 3px 6px 5px;
+  text-align: right;
+}
+
+.sector-table th:first-child,
+.sector-table td:first-child {
+  text-align: left;
+}
+
+.sector-table td {
+  border-top: 1px solid var(--border-soft);
+  font-family: var(--mono);
+  padding: 4px 6px;
+  text-align: right;
+}
+
+.dash-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+}
+
+/* ---- the coach --------------------------------------------------------- */
+
+.coach-input {
+  background: var(--bg-deep, rgba(0, 0, 0, 0.3));
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  flex: 1 1 220px;
+  font-family: inherit;
+  font-size: 12px;
+  min-width: 160px;
+  padding: 5px 8px;
+}
+
+.coach-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.coach-note {
+  color: var(--text-dim);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.coach-error {
+  color: var(--danger);
+}
+
+.coach-payload {
+  background: var(--bg-deep, rgba(0, 0, 0, 0.3));
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+  margin-top: 10px;
+  max-height: 260px;
+  overflow: auto;
+  padding: 10px;
+  white-space: pre;
+}
+
+.coach-answer {
+  border-top: 1px solid var(--border-soft);
+  margin-top: 12px;
+  padding-top: 10px;
+}
+
+.coach-para {
+  font-size: 12.5px;
+  line-height: 1.6;
+  margin: 0 0 10px;
+  white-space: pre-wrap;
+}

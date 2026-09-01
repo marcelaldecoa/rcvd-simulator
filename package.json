@@ -19,7 +19,8 @@
     "smoke": "tsx scripts/make-test-ibt.mts .smoke-session.ibt && electron scripts/smoke.mjs",
     "capture:overlay": "electron scripts/capture-overlay.mjs",
     "diagnose:irsdk": "node scripts/diagnose-irsdk.mjs",
-    "live:check": "tsx scripts/live-check.mts"
+    "live:check": "tsx scripts/live-check.mts",
+    "capture:app": "electron scripts/capture-app.mjs"
   },
   "dependencies": {
     "d3-array": "^3.2.4",

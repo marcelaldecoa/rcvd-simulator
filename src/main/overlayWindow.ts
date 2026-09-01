@@ -73,7 +73,13 @@ export function createOverlayHost(preloadPath: string, rendererUrl?: string): Ov
         nodeIntegration: false,
         // The overlay is doing 60 Hz canvas work; letting it throttle when the
         // game has focus would make it stutter exactly when it is being used.
-        backgroundThrottling: false
+        backgroundThrottling: false,
+        // Audible cues would otherwise never play. Chrome's default policy
+        // requires a user gesture in the page before audio starts, and this
+        // window is click-through by design -- it can never receive one. The
+        // gesture that authorises the sound is the driver enabling it in the
+        // settings, which happens in the other window.
+        autoplayPolicy: 'no-user-gesture-required'
       }
     })
     w.setAlwaysOnTop(true, 'screen-saver')

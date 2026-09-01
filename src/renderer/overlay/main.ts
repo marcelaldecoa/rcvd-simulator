@@ -13,9 +13,29 @@
  */
 
 import { drawOverlay, type DrawConfig, type DrawStatus, type OverlayReadingView } from './draw.js'
+import { CuePlayer, type SoundConfig } from './sound.js'
+import { AlertTracker } from '@telemetry/alerts.js'
+
+interface SoundSettings extends SoundConfig {
+  front: boolean
+  rear: boolean
+  threshold: number
+}
 
 interface OverlayBridge {
-  onConfig: (fn: (c: DrawConfig & { locked: boolean }) => void) => void
+  onConfig: (
+    fn: (
+      c: DrawConfig & {
+        locked: boolean
+        soundEnabled: boolean
+        soundVolume: number
+        soundKind: SoundConfig['kind']
+        soundFront: boolean
+        soundRear: boolean
+        soundThreshold: number
+      }
+    ) => void
+  ) => void
   onReading: (fn: (r: OverlayReadingView | null) => void) => void
   onStatus: (fn: (s: DrawStatus) => void) => void
 }
@@ -36,6 +56,19 @@ let config: DrawConfig = {
 let reading: OverlayReadingView | null = null
 let status: DrawStatus = { connected: false, detail: 'starting up' }
 let dirty = true
+
+// Audible cues. The decision of WHETHER to sound lives in the shared, tested
+// tracker; this file only decides what it sounds like.
+const cues = new CuePlayer()
+const alerts = new AlertTracker()
+let sound: SoundSettings = {
+  enabled: false,
+  volume: 0.6,
+  kind: 'blip',
+  front: true,
+  rear: true,
+  threshold: 0.9
+}
 
 /**
  * Match the backing store to the device pixel ratio.
@@ -72,6 +105,19 @@ if (bridge) {
       showBars: c.showBars,
       showNumbers: c.showNumbers
     }
+    sound = {
+      enabled: c.soundEnabled,
+      volume: c.soundVolume,
+      kind: c.soundKind,
+      front: c.soundFront,
+      rear: c.soundRear,
+      threshold: c.soundThreshold
+    }
+    alerts.configure({
+      threshold: sound.threshold,
+      front: sound.front,
+      rear: sound.rear
+    })
     // The drag handle only exists when the window is unlocked; while locked the
     // whole window is click-through anyway and the class would do nothing.
     document.body.classList.toggle('unlocked', !c.locked)
@@ -80,6 +126,12 @@ if (bridge) {
   bridge.onReading((r) => {
     reading = r
     dirty = true
+    if (!sound.enabled || !r) return
+    // performance.now() is milliseconds and monotonic, which is exactly what
+    // the tracker's intervals want -- and unlike the sample timestamp it does
+    // not jump when a session restarts.
+    const cue = alerts.update(r, performance.now() / 1000)
+    if (cue) cues.play(cue === 'frontLimit' ? 'front' : 'rear', sound)
   })
   bridge.onStatus((s) => {
     status = s

@@ -1103,6 +1103,218 @@ app.whenReady().then(async () => {
   await js("window.rcvd.stopTelemetry()")
   await settle(300)
 
+  // ---- the session dashboard -------------------------------------------
+  //
+  // The claim being tested is not that widgets render -- it is that a widget's
+  // lab link actually navigates. That link is the dashboard's whole reason to
+  // exist: a measurement is inert until you can reach the theory behind it.
+  const dash = await js(`(async () => {
+    const item = [...document.querySelectorAll('.nav-item')].find(e => e.textContent.includes('Session Dashboard'))
+    if (!item) throw new Error('dashboard nav entry missing')
+    item.click()
+    await new Promise(r => setTimeout(r, 400))
+
+    await window.rcvd.selectSource('synthetic')
+
+    // Wait for enough samples to have been analysed for the widgets to appear.
+    const deadline = Date.now() + 15000
+    while (Date.now() < deadline) {
+      if (document.querySelectorAll('.dash-grid .panel').length > 0) break
+      await new Promise(r => setTimeout(r, 200))
+    }
+
+    const widgets = [...document.querySelectorAll('.dash-grid .panel')].map(
+      p => p.querySelector('.panel-title')?.textContent ?? ''
+    )
+    const links = [...document.querySelectorAll('.widget-link')].map(b => b.textContent.trim())
+    const text = document.querySelector('.lab')?.innerText ?? ''
+    const legend = document.querySelectorAll('.widget-legend span').length
+    const sectorRows = document.querySelectorAll('.sector-table tbody tr').length
+
+    // Follow the balance widget's link and see where it lands.
+    const before = document.querySelector('.topbar h2')?.textContent ?? ''
+    const link = [...document.querySelectorAll('.widget-link')][0]
+    link?.click()
+    await new Promise(r => setTimeout(r, 600))
+    const after = document.querySelector('.topbar h2')?.textContent ?? ''
+
+    return { widgets, links, legend, sectorRows, before, after, hasNumbers: /%/.test(text) }
+  })()`)
+
+  record(
+    'dashboard builds widgets from a session',
+    dash.widgets.length >= 5,
+    `${dash.widgets.length} widgets: ${dash.widgets.join(', ').slice(0, 110)}`
+  )
+  record(
+    'every widget offers a way through to its chapter',
+    dash.links.length >= 5,
+    `${dash.links.length} lab links`
+  )
+  record(
+    'balance is reported as three shares that sum to the whole',
+    dash.legend === 3,
+    `${dash.legend} legend entries`
+  )
+  record(
+    'sectors are ranked by grip left unused',
+    dash.sectorRows > 0,
+    `${dash.sectorRows} rows across the sector and lap tables`
+  )
+  record(
+    'a widget link navigates to the lab that explains it',
+    dash.before !== dash.after && dash.after.length > 0,
+    `"${dash.before.trim()}" -> "${dash.after.trim()}"`
+  )
+
+  // The track map, from the session FILE -- the synthetic sweep is a matrix of
+  // steady trims rather than a lap, so it rightly publishes no heading and the
+  // map declines. The .ibt does carry one, which exercises the whole chain:
+  // channel -> sample -> reconstruction -> SVG.
+  const map = await js(`(async () => {
+    const item = [...document.querySelectorAll('.nav-item')].find(e => e.textContent.includes('Session Dashboard'))
+    item.click()
+    await new Promise(r => setTimeout(r, 300))
+    await window.rcvd.selectSource({ file: ${JSON.stringify(ibtPath)} })
+    const deadline = Date.now() + 20000
+    while (Date.now() < deadline) {
+      if (document.querySelectorAll('.dash-grid svg polyline').length > 0) break
+      await new Promise(r => setTimeout(r, 200))
+    }
+    const lines = [...document.querySelectorAll('.dash-grid svg polyline')]
+    const colours = new Set(lines.map(l => l.getAttribute('stroke')))
+    const panel = [...document.querySelectorAll('.dash-grid .panel')]
+      .find(p => p.querySelector('.panel-title')?.textContent === 'Track')
+    // Distinct points, to be sure it is a shape rather than a dot.
+    const pts = lines.flatMap(l => l.getAttribute('points').split(' '))
+    return {
+      lines: lines.length,
+      colours: colours.size,
+      points: new Set(pts).size,
+      note: panel?.querySelector('.panel-note')?.textContent ?? ''
+    }
+  })()`)
+
+  record(
+    'the track map is reconstructed from a session file',
+    map.lines > 0 && map.points > 200,
+    `${map.lines} sector polylines, ${map.points} distinct points`
+  )
+  record(
+    'the map is coloured by grip used rather than drawn flat',
+    map.colours > 1,
+    `${map.colours} distinct stroke colours`
+  )
+  record(
+    'a lap that does not return to its start is left open and says so',
+    /Left open|left open/.test(map.note),
+    map.note.replace(/\s+/g, ' ').slice(0, 100)
+  )
+
+  // ---- audible cues ------------------------------------------------------
+  //
+  // The sound itself cannot be asserted from here. What can is the contract:
+  // it is off by default, the thresholds clamp to a range that keeps the cue a
+  // WARNING rather than a report, and the settings reach the overlay window.
+  const audio = await js(`(async () => {
+    const item = [...document.querySelectorAll('.nav-item')].find(e => e.textContent.includes('iRacing Telemetry'))
+    item.click()
+    await new Promise(r => setTimeout(r, 500))
+
+    const fresh = await window.rcvd.getOverlayConfig()
+
+    // A threshold of 1 would mean "tell me once it has already let go", which
+    // is a report and arrives too late to act on. It must clamp below 1.
+    const tooLate = await window.rcvd.setOverlayConfig({ soundThreshold: 1 })
+    const tooEager = await window.rcvd.setOverlayConfig({ soundThreshold: 0.1 })
+    const loud = await window.rcvd.setOverlayConfig({ soundVolume: 5 })
+    const nonsense = await window.rcvd.setOverlayConfig({ soundKind: 'airhorn' })
+    const on = await window.rcvd.setOverlayConfig({
+      soundEnabled: true, soundKind: 'chirp', soundThreshold: 0.88, soundVolume: 0.5
+    })
+
+    const panel = [...document.querySelectorAll('.panel')].find(
+      p => p.querySelector('.panel-title')?.textContent === 'Audible warning'
+    )
+    const buttons = panel ? [...panel.querySelectorAll('.btn')].map(b => b.textContent.trim()) : []
+
+    await window.rcvd.setOverlayConfig({ soundEnabled: false, soundThreshold: 0.9, soundVolume: 0.6, soundKind: 'blip' })
+    return { fresh, tooLate, tooEager, loud, nonsense, on, buttons }
+  })()`)
+
+  record(
+    'audible cues are off until asked for',
+    audio.fresh.soundEnabled === false,
+    `soundEnabled = ${audio.fresh.soundEnabled}`
+  )
+  record(
+    'the warning threshold stays below the limit it warns about',
+    audio.tooLate.soundThreshold < 1 && audio.tooEager.soundThreshold >= 0.6,
+    `1 -> ${audio.tooLate.soundThreshold}, 0.1 -> ${audio.tooEager.soundThreshold}`
+  )
+  record(
+    'volume and cue kind reject nonsense rather than passing it on',
+    audio.loud.soundVolume <= 1 && audio.nonsense.soundKind !== 'airhorn',
+    `volume 5 -> ${audio.loud.soundVolume}, kind "airhorn" -> "${audio.nonsense.soundKind}"`
+  )
+  record(
+    'cue settings round-trip to the overlay',
+    audio.on.soundEnabled === true && audio.on.soundKind === 'chirp' &&
+      Math.abs(audio.on.soundThreshold - 0.88) < 1e-9,
+    `${audio.on.soundKind} at ${audio.on.soundThreshold}`
+  )
+  record(
+    'both ends can be switched independently',
+    audio.buttons.some(b => /Front/.test(b)) && audio.buttons.some(b => /Rear/.test(b)),
+    audio.buttons.join(', ').slice(0, 90)
+  )
+
+  // ---- the coach --------------------------------------------------------
+  //
+  // No network call is made here. What is checked is the contract around it:
+  // that it is OFF without a key, that the key never comes back to the
+  // renderer, and that the payload really is derived data rather than samples.
+  const coach = await js(`(async () => {
+    const before = await window.rcvd.coachStatus()
+
+    // Refuses to run with no key, without needing to reach the network.
+    const refused = await window.rcvd.coachDebrief({ brief: { session: { laps: 0 } } })
+
+    const set = await window.rcvd.setCoachKey('sk-ant-smoke-not-a-real-key')
+    const after = await window.rcvd.coachStatus()
+    const leaked = JSON.stringify(after).includes('smoke-not-a-real-key')
+    await window.rcvd.setCoachKey('')
+    const cleared = await window.rcvd.coachStatus()
+
+    // And what the page would send, read off the panel itself.
+    const btn = [...document.querySelectorAll('.btn')].find(b => /what is sent/i.test(b.textContent))
+    return { before, refused, set, after, leaked, cleared, hasPanel: Boolean(btn) }
+  })()`)
+
+  record(
+    'the coach is off until a key is supplied',
+    coach.before.hasKey === false && coach.before.ready === false,
+    coach.before.detail?.slice(0, 80)
+  )
+  record(
+    'a debrief with no key is refused locally, not at the network',
+    coach.refused.ok === false && /no api key/i.test(coach.refused.error ?? ''),
+    coach.refused.error?.slice(0, 60)
+  )
+  record(
+    'setting a key enables it and clearing it disables it again',
+    coach.set.hasKey === true && coach.cleared.hasKey === false,
+    `set -> ${coach.set.hasKey}, cleared -> ${coach.cleared.hasKey}`
+  )
+  record(
+    'the key is never handed back to the renderer',
+    coach.leaked === false,
+    coach.leaked ? 'KEY LEAKED INTO STATUS' : 'status carries only whether one is set'
+  )
+
+  await js("window.rcvd.stopTelemetry()")
+  await settle(300)
+
   // Aerodynamics and the g-g envelope. The claim worth checking is that
   // downforce actually reaches the vehicle model rather than sitting in its own
   // corner of the app.

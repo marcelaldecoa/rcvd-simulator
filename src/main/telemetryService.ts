@@ -94,7 +94,7 @@ export class TelemetryService {
   state(): ServiceState {
     return {
       status: this.source?.status() ?? {
-        kind: 'synthetic',
+        kind: 'none',
         connected: false,
         detail: 'no source selected'
       },

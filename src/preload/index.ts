@@ -18,6 +18,10 @@ const api = {
   pickSessionFile: (): Promise<string | null> => ipcRenderer.invoke('telemetry:pick'),
   /** Session samples, for the post-session analysis. */
   telemetrySamples: (): Promise<unknown[]> => ipcRenderer.invoke('telemetry:samples'),
+
+  coachStatus: (): Promise<unknown> => ipcRenderer.invoke('coach:status'),
+  setCoachKey: (key: string): Promise<unknown> => ipcRenderer.invoke('coach:setKey', key),
+  coachDebrief: (req: unknown): Promise<unknown> => ipcRenderer.invoke('coach:debrief', req),
   /** Throttled state pushes, so the UI does not re-render at 60 Hz. */
   onTelemetry: (fn: (state: unknown) => void): (() => void) => {
     const handler = (_e: unknown, state: unknown): void => fn(state)
