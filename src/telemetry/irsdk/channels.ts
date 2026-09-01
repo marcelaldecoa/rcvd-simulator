@@ -191,31 +191,65 @@ export function checkConventions(samples: TelemetrySample[]): ConventionCheck {
  * A steering ratio inferred from the data, for when the session YAML does not
  * carry one.
  *
- * At low lateral acceleration a car is close to Ackermann, so the road-wheel
- * steer is about L/R = L*r/V. Regressing handwheel angle against that gives the
- * ratio. Deliberately restricted to gentle corners, because at any real
- * cornering load the understeer term dominates and the fit would return the
- * ratio times an unknown factor.
+ * The steady-state cornering equation, in HANDWHEEL angle, is
+ *
+ *     theta = G (L/R) + G K Ay
+ *
+ * so it is linear in two regressors -- the Ackermann term L*r/V and the lateral
+ * acceleration -- with coefficients G and G*K. Fitting BOTH recovers the ratio
+ * cleanly.
+ *
+ * Fitting only the Ackermann term, which is the obvious thing to try, is
+ * systematically biased: the understeer contribution does not vanish, it gets
+ * absorbed into the one coefficient, and the ratio comes back too large by a
+ * factor of roughly (1 + K Ay R / L). The symptom is subtle and nasty -- every
+ * steer angle is scaled, so the REAR axle identification stays perfect while
+ * the front is wrong, and the two look like a tyre difference rather than a
+ * units error. Restricting to gentle corners reduces the bias without removing
+ * it, so the two-parameter fit is the fix rather than a tighter filter.
  */
 export function inferSteeringRatio(
   samples: TelemetrySample[],
   wheelbase: number,
-  maxAy = 3
+  /**
+   * Cap on |Ay|, m/s^2. Generous, because the two-regressor fit no longer needs
+   * to hide from the understeer term in gentle corners -- but not unlimited,
+   * since a real car's K is not constant near the limit.
+   */
+  maxAy = 10
 ): number | null {
-  let sxy = 0
-  let sxx = 0
+  // Normal equations for y = a*x1 + b*x2, no intercept: steer is zero when
+  // both the curvature and the lateral acceleration are.
+  let s11 = 0
+  let s22 = 0
+  let s12 = 0
+  let s1y = 0
+  let s2y = 0
   let n = 0
+
   for (const s of samples) {
     if (s.speed < 15) continue
     if (Math.abs(s.ay) > maxAy) continue
     const ackermann = (wheelbase * s.yawRate) / s.speed
     if (Math.abs(ackermann) < 5e-4) continue
+    const ay = s.ay / 9.80665
     // s.steer here is still HANDWHEEL, since this runs before the division.
-    sxy += s.steer * ackermann
-    sxx += ackermann * ackermann
+    s11 += ackermann * ackermann
+    s22 += ay * ay
+    s12 += ackermann * ay
+    s1y += ackermann * s.steer
+    s2y += ay * s.steer
     n++
   }
-  if (n < 50 || sxx <= 0) return null
-  const ratio = sxy / sxx
+
+  if (n < 50) return null
+  const det = s11 * s22 - s12 * s12
+  // A near-singular system means the two regressors are collinear over this
+  // data -- every corner taken at the same radius, say -- and the ratio cannot
+  // be separated from the understeer term. Say so rather than returning the
+  // biased single-regressor answer.
+  if (Math.abs(det) < 1e-12 * Math.max(s11 * s22, 1e-12)) return null
+
+  const ratio = (s1y * s22 - s2y * s12) / det
   return ratio > 1 && ratio < 40 ? ratio : null
 }

@@ -7,3 +7,6 @@ release/
 
 # TypeScript incremental build state - regenerated on every build
 *.tsbuildinfo
+
+# Synthetic telemetry generated for the smoke run
+.smoke-session.ibt
