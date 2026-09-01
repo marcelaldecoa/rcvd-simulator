@@ -365,3 +365,125 @@ export function defaultBudget(v: BicycleVehicle): BudgetLine[] {
     { mechanism: 'Aligning torque compliance steer', front: 0, rear: 0, chapter: 'Ch 23' }
   ]
 }
+
+// ---------------------------------------------------------------------------
+// A single trim state with real tires -- what the cornering diagram draws.
+// ---------------------------------------------------------------------------
+
+export interface AxleLimits {
+  /** Peak lateral force the front axle can make, N. */
+  capacityFront: number
+  capacityRear: number
+  /** Lateral acceleration at which the front axle saturates, g. */
+  limitAyFront: number
+  limitAyRear: number
+  /** The lower of the two -- the car's limit, g. */
+  limitAy: number
+  /** Which axle gives up first. */
+  limitingAxle: 'front' | 'rear'
+}
+
+/**
+ * Which axle runs out of grip first, and at what lateral acceleration.
+ *
+ * Ch 7 §3: "the axle whose curve peaks lower is the limiting axle" -- and
+ * whether that is the front or the rear is whether the car pushes or spins at
+ * the limit. With no load transfer in the bicycle model, each tire simply
+ * carries half its axle's static load.
+ */
+export function axleLimits(
+  v: BicycleVehicle,
+  tireFront: TireModel,
+  tireRear: TireModel
+): AxleLimits {
+  const { wf, wr } = derive(v)
+  const maxAlpha = toRad(25)
+  const capacityFront = 2 * goldenMax((al) => tireFront.fy(al, wf / 2), 0, maxAlpha).value
+  const capacityRear = 2 * goldenMax((al) => tireRear.fy(al, wr / 2), 0, maxAlpha).value
+  const limitAyFront = capacityFront / wf
+  const limitAyRear = capacityRear / wr
+  const front = limitAyFront <= limitAyRear
+  return {
+    capacityFront,
+    capacityRear,
+    limitAyFront,
+    limitAyRear,
+    limitAy: Math.min(limitAyFront, limitAyRear),
+    limitingAxle: front ? 'front' : 'rear'
+  }
+}
+
+export interface NonlinearState {
+  /** Lateral acceleration, g. */
+  ay: number
+  speed: number
+  /** Path radius, m. */
+  radius: number
+  /** Road-wheel steer angle, rad. */
+  steer: number
+  /** Sideslip angle at the CG, rad. */
+  beta: number
+  alphaF: number
+  alphaR: number
+  /** Lateral force demanded of each axle, N. */
+  fyFront: number
+  fyRear: number
+  /** Fraction of each axle's grip in use, 0-1. */
+  usageFront: number
+  usageRear: number
+  /** True once an axle cannot make the demanded force. */
+  saturated: boolean
+  limits: AxleLimits
+}
+
+/**
+ * The car's state in a steady turn at a given speed and lateral acceleration,
+ * computed with the real nonlinear tire characteristics.
+ *
+ * Sideslip comes out of the geometry rather than a gain, which keeps it exact
+ * for any tire law: the rear axle's velocity direction is -alpha_r, and it sits
+ * b behind the CG on a path of radius R, so
+ *
+ *   beta = b/R - alpha_r
+ */
+export function nonlinearTrim(
+  v: BicycleVehicle,
+  tireFront: TireModel,
+  tireRear: TireModel,
+  speed: number,
+  ay: number
+): NonlinearState {
+  const { L, wf, wr } = derive(v)
+  const limits = axleLimits(v, tireFront, tireRear)
+
+  const fyFront = wf * ay
+  const fyRear = wr * ay
+  const radius = ay > 1e-6 ? (speed * speed) / (G * ay) : Infinity
+
+  const solve = (t: TireModel, fz: number, need: number, peakAt: number): number | null =>
+    bisect((al) => t.fy(al, fz) - need, 0, peakAt)
+
+  const peakFAt = goldenMax((al) => tireFront.fy(al, wf / 2), 0, toRad(25)).at
+  const peakRAt = goldenMax((al) => tireRear.fy(al, wr / 2), 0, toRad(25)).at
+
+  const aF = solve(tireFront, wf / 2, fyFront / 2, peakFAt)
+  const aR = solve(tireRear, wr / 2, fyRear / 2, peakRAt)
+  const alphaF = aF ?? peakFAt
+  const alphaR = aR ?? peakRAt
+
+  return {
+    ay,
+    speed,
+    radius,
+    steer: (radius === Infinity ? 0 : L / radius) + (alphaF - alphaR),
+    beta: (radius === Infinity ? 0 : v.b / radius) - alphaR,
+    alphaF,
+    alphaR,
+    fyFront,
+    fyRear,
+    usageFront: limits.capacityFront > 0 ? fyFront / limits.capacityFront : 0,
+    usageRear: limits.capacityRear > 0 ? fyRear / limits.capacityRear : 0,
+    saturated: aF === null || aR === null,
+    limits
+  }
+}

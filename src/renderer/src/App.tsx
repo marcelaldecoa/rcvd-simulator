@@ -1,22 +1,35 @@
 import { useState } from 'react'
 import { CHAPTERS, PARTS, type Chapter } from './data/chapters'
 import { Notes } from './components/Notes'
+import { Exercises } from './components/Exercises'
+import { CorneringLab } from './labs/CorneringLab'
+import { ConditionsLab } from './labs/ConditionsLab'
 import { TireLab } from './labs/TireLab'
 import { SteadyStateLab } from './labs/SteadyStateLab'
 import { TransientLab } from './labs/TransientLab'
+import { PairAnalysisLab } from './labs/PairAnalysisLab'
+import { WheelLoadsLab } from './labs/WheelLoadsLab'
 import { useGarage } from './store/garage'
 import { summarise } from '@core/vehicle/steadyState.js'
 
-type View = 'lab' | 'notes'
+type View = 'lab' | 'notes' | 'exercises'
 
 function LabFor({ chapter }: { chapter: Chapter }): React.JSX.Element {
   switch (chapter.lab) {
+    case 'cornering':
+      return <CorneringLab />
+    case 'conditions':
+      return <ConditionsLab />
     case 'tire':
       return <TireLab />
     case 'steady':
       return <SteadyStateLab />
     case 'transient':
       return <TransientLab />
+    case 'pair':
+      return <PairAnalysisLab />
+    case 'wheelLoads':
+      return <WheelLoadsLab />
     default:
       return (
         <div className="empty">
@@ -32,7 +45,7 @@ function LabFor({ chapter }: { chapter: Chapter }): React.JSX.Element {
 }
 
 export function App(): React.JSX.Element {
-  const [active, setActive] = useState<Chapter>(CHAPTERS.find((c) => c.lab === 'tire')!)
+  const [active, setActive] = useState<Chapter>(CHAPTERS.find((c) => c.lab === 'cornering')!)
   const [view, setView] = useState<View>('lab')
 
   const vehicle = useGarage((s) => s.vehicle)
@@ -40,7 +53,9 @@ export function App(): React.JSX.Element {
   const s = summarise(vehicle)
 
   const showLab = active.lab !== undefined
-  const effectiveView: View = showLab ? view : 'notes'
+  const hasExercises = active.n > 0
+  const effectiveView: View =
+    view === 'lab' && !showLab ? 'notes' : view === 'exercises' && !hasExercises ? 'notes' : view
 
   return (
     <div className="app">
@@ -55,8 +70,8 @@ export function App(): React.JSX.Element {
               <div className="nav-group">{part}</div>
               {CHAPTERS.filter((c) => c.part === part).map((c) => (
                 <div
-                  key={c.file}
-                  className={`nav-item${c.file === active.file ? ' active' : ''}`}
+                  key={`${c.part}-${c.n}-${c.lab ?? 'notes'}`}
+                  className={`nav-item${c === active ? ' active' : ''}`}
                   onClick={() => {
                     setActive(c)
                     if (c.lab) setView('lab')
@@ -126,11 +141,25 @@ export function App(): React.JSX.Element {
             >
               Notes
             </button>
+            {hasExercises && (
+              <button
+                className={`tab${effectiveView === 'exercises' ? ' active' : ''}`}
+                onClick={() => setView('exercises')}
+              >
+                Exercises
+              </button>
+            )}
           </div>
         </div>
 
         <div className="content">
-          {effectiveView === 'lab' ? <LabFor chapter={active} /> : <Notes file={active.file} />}
+          {effectiveView === 'lab' ? (
+            <LabFor chapter={active} />
+          ) : effectiveView === 'exercises' ? (
+            <Exercises file={active.file} title={`Chapter ${active.n}`} />
+          ) : (
+            <Notes file={active.file} />
+          )}
         </div>
       </main>
     </div>

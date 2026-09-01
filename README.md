@@ -11,13 +11,166 @@ quantity move with it.
 
 | Chapter | Lab | What it does |
 |---|---|---|
-| 2 — Tire Behavior | ✅ | Magic Formula and brush models, load sensitivity, axle capacity under load transfer, pneumatic trail collapse, friction ellipse |
+| **Start here — How a Car Corners** | ✅ | Top-down cornering diagram: the slip angle at each axle drawn as an actual wedge, a plain-language verdict, and five guided experiments |
+| **Start here — Changing Conditions** | ✅ | Fuel, wear, temperature, pressure and track grip applied to the car; A/B compare against a frozen baseline, a stint timeline, and a sensitivity ranking |
+| **Exercises** (every chapter) | ✅ | The notes' ~140 exercises, one at a time, solutions withheld until asked for, progress remembered |
+| 2 — Tire Behavior | ✅ | **Contact-patch view** (adhesion vs sliding), Magic Formula and brush models, load sensitivity, axle capacity under load transfer, pneumatic trail collapse, friction ellipse |
 | 5 — Steady-State Stability and Control | ✅ | Understeer gradient and Bundorf compliances, constant-radius skid pad, response gains vs speed, significant speeds, stability derivatives, understeer budget |
-| 6 — Transient Stability and Control | ✅ | Step steer response, modal parameters vs speed, root locus, frequency response |
+| **7 — Steady-State Pair Analysis** | ✅ | Axle characteristics at real wheel loads, TLLTD sweep, corner-phase (braking/mid/power), and what load transfer costs |
+| 6 — Transient Stability and Control | ✅ | **Animated step-steer path** (heading vs course), step response, modal parameters vs speed, root locus, frequency response |
+| **18 — Wheel Loads** | ✅ | Four-corner load diagram, the three-way transfer split (geometric/elastic/unsprung), TLLTD, roll gradient, longitudinal transfer |
 | All others | — | Notes render; labs to follow |
 
 Phase 2 (iRacing telemetry) has its data model, analysis and tests in place —
 see [Telemetry](#telemetry-phase-2) — but no simulator connection yet.
+
+## The idea the app is built around
+
+A tyre makes lateral force **only by slipping** — by pointing slightly away from
+the direction it is actually travelling. Understeer and oversteer are nothing
+more than *which axle is slipping more*.
+
+**Start here** draws exactly that: the car from above, with the angle between
+where each wheel points and where it is actually going shaded in. Front wedge
+bigger than rear is understeer. That is the whole definition, and it takes one
+look rather than a paragraph.
+
+Real slip angles are only a few degrees, so every angle in the diagram is drawn
+multiplied by an exaggeration factor — auto-scaled by default and always shown
+on screen. Because every angle uses the *same* factor the construction stays
+exact: the wedges still add up to `δ = L/R + (αf − αr)`.
+
+## The three pictures
+
+Each of the three built chapters has one diagram that carries its central idea,
+so the charts have something concrete to be *about*.
+
+**Start here — the car in a corner.** The wedge at each axle is the slip angle.
+Front bigger than rear is understeer. That is the whole definition.
+
+**Chapter 2 — inside the contact patch.** Bristles enter at the leading edge
+and deflect linearly, so shear rises as a straight line; the friction available
+follows the parabolic pressure distribution. Where the line meets the parabola,
+rubber lets go. One picture explains three things at once: why the force curve
+peaks where it does (the sliding zone has eaten the whole patch), why pneumatic
+trail exists (the shear distribution is lopsided toward the rear), and why
+steering torque warns of the front limit (the centroid moves forward as the
+sliding zone grows). Sweeping slip angle on the default tyre:
+
+| Slip | Patch sliding | Force | Trail | Aligning torque |
+|---|---|---|---|---|
+| 0.5° | 6% | 1.02 kN | 23.6 mm | 24 N·m |
+| 3° | 35% | 4.49 kN | 10.7 mm | **48 N·m** |
+| 7° | 82% | **6.16 kN** | 0.4 mm | 3 N·m |
+| 12° | 100% | 6.20 kN | 0.0 mm | 0 N·m |
+
+Torque peaks at 3° and has collapsed by 7° — while force is still climbing.
+
+**Chapter 6 — where the car actually goes.** A replayable step steer with two
+arrows leaving the car: where it is *pointing* and where it is *going*. They
+separate immediately, because steer makes a yaw moment at once but the path
+only bends once the rear axle builds slip. Above the tangent speed the gap even
+changes sign partway through: the nose swings from outside the corner to inside
+it during a single input.
+
+## Changing conditions
+
+Nothing about a car stays still, so this page moves the world and shows the car
+responding. Named scenarios, each producing a genuinely different car:
+
+| Preset | Limit Ay | Limit balance | Understeer gradient | Gives up first |
+|---|---|---|---|---|
+| Qualifying | 1.74 g | +0.225 | +0.174 | front |
+| Optimum | 1.66 g | +0.213 | +0.174 | front |
+| End of a long stint | 1.41 g | +0.031 | +0.186 | front |
+| Overheated rears | 1.26 g | **−0.391** | +0.245 | **rear** |
+| Out-lap, cold tyres | 1.21 g | +0.095 | +0.180 | front |
+| Wet | 0.93 g | +0.103 | +0.174 | front |
+
+**Two balance numbers are shown everywhere, on purpose.** The understeer
+gradient is balance in the linear range; limit balance is how much grip the rear
+has in hand over the front — which end gives up first. They are different
+quantities and can move in opposite directions:
+
+- *Wet* leaves the gradient **completely unchanged** and collapses the limit. A
+  uniform grip change scales both axles alike, so the car is slower but not
+  differently balanced.
+- *Overheated rears* raises the gradient (more understeer at low g) while driving
+  limit balance strongly negative. That is a driver reporting "it pushes into the
+  corner then snaps on exit" — one car, both complaints, both true.
+- Worn tyres do the same thing: less tread means less squirm and so more
+  cornering stiffness, while degraded rubber means less peak grip.
+
+Three views: **Compare** (freeze a baseline, change one thing, read the
+difference — Ch 11's A-B-A protocol), **Stint** (lap-by-lap drift as fuel burns
+and tyres wear, with the two effects fighting so the fastest lap lands in the
+middle), and **What matters** (a sensitivity ranking that reorders when you
+switch the metric: track grip tops outright grip and is near the bottom for
+balance).
+
+### What this model does and does not capture
+
+Fuel is exact statics — mass, CG and yaw inertia by the parallel axis theorem.
+Temperature, pressure and wear are **engineering parameterisations**: Ch 2 §8
+states their direction and importance but supplies no curves, so the shapes here
+honour the text's claims, are adjustable, and are labelled as such in the app.
+
+Conditions are evaluated through **Ch 7 pair analysis** with real wheel loads,
+so mass now costs lateral grip properly — roughly twice what it did before load
+transfer existed, because heavier means more transfer and the capacity loss goes
+as its square.
+
+## Load transfer — Ch 18 and Ch 7
+
+The chapter pair that makes everything else bite.
+
+**Ch 18 — Wheel Loads.** Total lateral transfer is *fixed* by mass, lateral
+acceleration, CG height and track. Its *distribution* is free, and that is the
+whole of balance tuning. The lab shows each contact patch with area proportional
+to load against a static reference ring, and splits each axle's transfer into the
+three paths of §5 — geometric through the links, elastic through the springs and
+bars, unsprung at the wheel centre. Turning a bar visibly moves the split while
+the total readout does not budge.
+
+Exercise 18.2 is reproduced in full — every intermediate quantity, not just the
+answer:
+
+| | Geometric | Elastic | Unsprung | Total |
+|---|---|---|---|---|
+| Front | 117.9 N | 908.7 N | 136.7 N | **1163.3 N** |
+| Rear | 252.2 N | 784.7 N | 136.7 N | **1173.6 N** |
+
+giving TLLTD = 49.8% front, and summing to 2336.9 N — Exercise 18.3's check.
+
+One correction to the book's form: that force sum holds only when the front and
+rear tracks are **equal**. Each axle's transfer acts across its own track, so the
+exact invariant is on moments —
+
+```
+dFzf·tf + dFzr·tr = W·Ay·h
+```
+
+— which holds for any pair of tracks. Both are provided; the tests use the
+moment form on a car with staggered tracks and the book's force form on
+Exercise 18.3's square-track car.
+
+**Ch 7 — Pair Analysis.** Each wheel gets its own load, and an axle
+characteristic is the sum of two tyres working at *different* loads. Because
+force is concave in load, that asymmetry costs capacity — quadratically. The
+TLLTD sweep is the centrepiece: moving the bars front to rear swings balance
+across its whole range while total grip moves by one or two percent. Bars
+redistribute; they do not reduce.
+
+### What a bar cannot fix
+
+The default car turned out to be a good lesson. Its bars move limit balance by
+0.057 g across their entire range, but the rear has 0.22 g of grip in hand — so
+**no bar setting makes it neutral.** That is not a modelling failure, it is
+Ch 12's primary/secondary hierarchy: a grip difference between axles (compound,
+size, pressure, temperature, wear) is a *primary* effect that bars cannot undo.
+Bars are a secondary trim around a car that is already roughly right. The lab
+says so, quantifies the gap, and has an experiment that equalises the tyres and
+shows the bars reaching neutral once they can.
 
 ## The garage
 
@@ -74,7 +227,8 @@ npm run dist
 src/
   core/            pure physics, no UI imports, fully unit-tested
     tire/          Magic Formula, brush/Fiala, load sensitivity, size scaling
-    vehicle/       bicycle model: steady state (Ch 5), transient (Ch 6)
+    vehicle/       bicycle model (Ch 5, 6), wheel loads (Ch 18), pair analysis (Ch 7)
+    conditions/    fuel, wear, temperature, pressure, track grip
     util/          numerics — RK4, root finding, eigenvalues
   telemetry/       Phase 2 data model, identification, synthetic source
   renderer/        React UI — labs, charts, notes viewer
@@ -99,6 +253,15 @@ a chapter quotes a number, that number is the assertion:
 - **Ex 6.1** — understeer gradient K = 0.01125 rad/g
 - **Ex 6.4** — 12.6% overshoot and 0.72 s settling at ζ = 0.55
 - **Ex 6.5** — critical speed 44.3 m/s
+- **Ex 18.2** — the full three-mass chain: sprung split 3105/3795 N, roll axis at
+  0.0565 m, H = 0.2585 m, all six transfer contributions, TLLTD 49.8%
+- **Ex 18.3** — the contributions sum to the static total, 2336.9 N
+
+The contact-patch model is integrated with Simpson's rule, which is exact for
+its piecewise-linear-and-quadratic integrand, so it reproduces the closed-form
+brush force and aligning torque to round-off rather than to grid resolution.
+Exercise parsing is tested against all 23 real chapter documents rather than a
+fixture — every exercise must pair with its solution.
 
 The load-bearing tests are the cross-chapter ones, because they are what catch
 a sign error — the failure mode Ch 4 warns is the most common in the subject:

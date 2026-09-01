@@ -10,7 +10,9 @@ import { describe, expect, it } from 'vitest'
 import { toRad, toDeg } from '../util/numeric.js'
 import {
   brushFy,
+  brushMz,
   brushSlideAngle,
+  contactPatch,
   ellipseRemainingFx,
   ellipseRemainingFy,
   relaxationLag,
@@ -240,5 +242,83 @@ describe('Magic Formula', () => {
     const pure = tire.combined({ alpha: toRad(4), kappa: 0, fz }).fy
     const combined = tire.combined({ alpha: toRad(4), kappa: 0.15, fz }).fy
     expect(combined).toBeLessThan(pure)
+  })
+})
+
+describe('Ch 2 §2.3 - the contact patch', () => {
+  // The Exercise 2.1 tire, so the patch integral can be checked against the
+  // closed-form brush force that the exercise already pins down.
+  const ca = 1600 * (180 / Math.PI)
+  const mu = 1.6
+  const fz = 4000
+  const len = 0.16
+
+  it('integrates to exactly the closed-form brush force', () => {
+    for (const deg of [0.5, 2, 5, 8, 11.83, 15]) {
+      const p = contactPatch(toRad(deg), ca, mu, fz, len)
+      expect(p.fy).toBeCloseTo(brushFy(toRad(deg), ca, mu, fz), 6)
+    }
+  })
+
+  it('reproduces the Exercise 2.1 force of 2698 N at 2 degrees', () => {
+    expect(contactPatch(toRad(2), ca, mu, fz, len).fy).toBeCloseTo(2698, -1)
+  })
+
+  it('caps the whole-patch friction integral at mu*Fz', () => {
+    const p = contactPatch(toRad(40), ca, mu, fz, len)
+    expect(p.fullySliding).toBe(true)
+    expect(p.fy).toBeCloseTo(mu * fz, 6)
+  })
+
+  it('grows the sliding zone from the REAR of the patch as slip rises', () => {
+    const small = contactPatch(toRad(1), ca, mu, fz, len)
+    const large = contactPatch(toRad(6), ca, mu, fz, len)
+    expect(small.slidingFraction).toBeLessThan(large.slidingFraction)
+    // Sliding samples must be a contiguous block ending at the trailing edge.
+    for (const p of [small, large]) {
+      const first = p.samples.findIndex((s) => s.sliding)
+      expect(first).toBeGreaterThan(0)
+      expect(p.samples.slice(first).every((s) => s.sliding)).toBe(true)
+      expect(p.samples[p.samples.length - 1].sliding).toBe(true)
+    }
+  })
+
+  it('consumes the whole patch exactly at the force peak', () => {
+    // theta = 1 is the full-slide angle, which is where the brush force
+    // saturates -- the chapter's answer to "why is the peak where it is".
+    const slide = brushSlideAngle(ca, mu, fz)
+    expect(contactPatch(slide * 0.99, ca, mu, fz, len).fullySliding).toBe(false)
+    expect(contactPatch(slide * 1.01, ca, mu, fz, len).fullySliding).toBe(true)
+  })
+
+  it('places the force centroid two-thirds back at vanishing slip', () => {
+    const p = contactPatch(toRad(0.01), ca, mu, fz, len)
+    expect(p.centroid).toBeCloseTo(2 / 3, 3)
+    // ...which is a trail of one sixth of the contact length
+    expect(p.pneumaticTrail).toBeCloseTo(len / 6, 4)
+  })
+
+  it('moves the centroid FORWARD as the sliding zone grows, collapsing trail', () => {
+    const angles = [0.5, 2, 4, 6, 8].map((d) => contactPatch(toRad(d), ca, mu, fz, len))
+    for (let i = 1; i < angles.length; i++) {
+      expect(angles[i].centroid).toBeLessThan(angles[i - 1].centroid)
+      expect(angles[i].pneumaticTrail).toBeLessThan(angles[i - 1].pneumaticTrail)
+    }
+  })
+
+  it('agrees with the closed-form aligning torque', () => {
+    for (const deg of [1, 3, 6]) {
+      const p = contactPatch(toRad(deg), ca, mu, fz, len)
+      const mz = brushMz(toRad(deg), ca, mu, fz, len / 6)
+      expect(p.pneumaticTrail * p.fy).toBeCloseTo(mz, 6)
+    }
+  })
+
+  it('never lets the developed shear exceed the friction limit', () => {
+    for (const deg of [1, 4, 9, 20]) {
+      for (const s of contactPatch(toRad(deg), ca, mu, fz, len).samples) {
+        expect(s.q).toBeLessThanOrEqual(s.qMax + 1e-6)
+      }
+    }
   })
 })

@@ -8,8 +8,10 @@
  * so that coincidence is visible rather than asserted.
  */
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Chart, type Series } from '../components/Chart'
+import { PathDiagram } from '../components/PathDiagram'
+import { TryThis, type Experiment } from '../components/Teach'
 import { Formula, Panel, Readout, Readouts, Slider } from '../components/ui'
 import { useGarage } from '../store/garage'
 import { derive } from '@core/vehicle/params.js'
@@ -19,7 +21,8 @@ import {
   modal,
   modalSweep,
   secondOrderOvershoot,
-  stepSteer
+  stepSteer,
+  trajectory
 } from '@core/vehicle/transient.js'
 import { toDeg, toRad } from '@core/util/numeric.js'
 
@@ -44,6 +47,49 @@ export function TransientLab(): React.JSX.Element {
     () => stepSteer(vehicle, speed, steer, 2.5, 0.0005),
     [vehicle, speed, steer]
   )
+
+  /**
+   * Integrate finely for accuracy, then decimate for drawing. The full 5000
+   * samples would be rebuilt into an SVG path string on every animation frame;
+   * a few hundred is indistinguishable on screen and keeps playback smooth.
+   */
+  const path = useMemo(() => {
+    const full = trajectory(step, speed)
+    const stride = Math.max(1, Math.floor(full.length / 400))
+    const out = full.filter((_, i) => i % stride === 0)
+    if (out[out.length - 1] !== full[full.length - 1]) out.push(full[full.length - 1])
+    return out
+  }, [step, speed])
+
+  // Playhead over the step response, shared by the animation and the traces.
+  const [cursor, setCursor] = useState(0)
+  const [playing, setPlaying] = useState(false)
+  const raf = useRef<number>(0)
+  const startedAt = useRef<number>(0)
+
+  useEffect(() => setCursor(path.length - 1), [path.length])
+
+  useEffect(() => {
+    if (!playing) return
+    // Replay at one quarter of real time; the interesting part is the first
+    // 300 ms, which is over before the eye can follow it.
+    const dur = (step.samples[step.samples.length - 1]?.t ?? 1) * 4000
+    startedAt.current = performance.now()
+    const tick = (): void => {
+      const frac = (performance.now() - startedAt.current) / dur
+      if (frac >= 1) {
+        setCursor(path.length - 1)
+        setPlaying(false)
+        return
+      }
+      setCursor(Math.floor(frac * (path.length - 1)))
+      raf.current = requestAnimationFrame(tick)
+    }
+    raf.current = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf.current)
+  }, [playing, path.length, step])
+
+  const now = path[Math.min(cursor, path.length - 1)]
 
   // Thin the samples for plotting; 5000 points per series is wasted ink.
   const thin = <T,>(arr: T[], n = 400): T[] => {
@@ -169,6 +215,69 @@ export function TransientLab(): React.JSX.Element {
   ]
 
   const metrics = step.metrics
+
+  const experiments: Experiment[] = [
+    {
+      title: 'Watch the nose rotate before the car changes direction',
+      action: 'Press Replay, then scrub the Time slider through the first 0.2 s.',
+      predict: 'Do the two arrows point the same way as the car starts to turn?',
+      result: (
+        <>
+          They separate almost immediately. Steer input makes front tyre force at
+          once, which makes a yaw moment at once — so the car starts{' '}
+          <strong>rotating</strong> straight away. But the path only bends once the
+          rear axle has built its own slip angle. Drivers call the delay "the car
+          taking a set", and it is{' '}
+          <strong>{(metrics.ayLagBehindYaw * 1000).toFixed(0)} ms</strong> here.
+        </>
+      )
+    },
+    {
+      title: 'Make the car respond more slowly by going faster',
+      action: 'Set speed to 20 m/s, note the natural frequency, then set it to 70 m/s.',
+      predict: 'Does the car become quicker or slower to respond as speed rises?',
+      result: (
+        <>
+          <strong>Slower.</strong> Natural frequency falls as 1/V, so a car that
+          responds at 1.5 Hz at 20 m/s manages about 0.6 Hz at 50. Damping falls too.
+          This is why high-speed corrections have to be started earlier — the machine
+          itself has become more sluggish, not the driver.
+        </>
+      ),
+      run: () => setSpeed(70),
+      reset: () => setSpeed(40)
+    },
+    {
+      title: 'Centralise the mass',
+      action: 'Cut yaw inertia by 20% and compare natural frequency and damping.',
+      predict: 'Exercise 6.6 — does reducing Izz help one of them, or both?',
+      result: (
+        <>
+          <strong>Both.</strong> ω<sub>n</sub> rises by 1/√0.8 ≈ 12%, and damping ratio
+          rises too. A double benefit from one change, which is the whole argument for
+          mid-engine layouts and for carrying mass near the centre of the car. Very
+          few changes in vehicle dynamics improve two things at once.
+        </>
+      ),
+      run: () => setVehicle({ izz: Math.round(vehicle.izz * 0.8) }),
+      reset: () => setVehicle({ izz: Math.round(vehicle.izz / 0.8) })
+    },
+    {
+      title: 'Cross the critical speed',
+      action:
+        'Soften the rear axle stiffness until the balance goes oversteering, then raise speed past the critical speed.',
+      predict: 'What happens to the path, and to the eigenvalues on the root locus?',
+      result: (
+        <>
+          The path diverges instead of settling, and an eigenvalue crosses into the
+          right half plane. Ch 6 §3.2's payoff: this is the <em>same event</em> as the
+          Ch 5 stability factor reaching zero. Steady-state divergence and dynamic
+          instability are one phenomenon seen two ways.
+        </>
+      ),
+      run: () => setVehicle({ cr: Math.round(vehicle.cf * 0.55) })
+    }
+  ]
 
   return (
     <div className="lab">
@@ -314,6 +423,74 @@ export function TransientLab(): React.JSX.Element {
       </div>
 
       <div className="stack">
+        <Panel
+          title="Where the car actually goes"
+          reference="Ch 6 §4"
+          right={
+            <button
+              className={`btn${playing ? ' active' : ''}`}
+              onClick={() => {
+                setCursor(0)
+                setPlaying(!playing)
+              }}
+            >
+              {playing ? '⏸ Pause' : '▶ Replay the step'}
+            </button>
+          }
+          note={
+            <>
+              Two arrows leave the car: grey is where it is <strong>pointing</strong>,
+              teal is where it is <strong>going</strong>. Scrub the slider and watch
+              them separate. Above the tangent speed the gap even changes sign partway
+              through — the nose swings from outside the corner to inside it, during a
+              single steering input.
+            </>
+          }
+        >
+          <PathDiagram path={path} cursor={cursor} wheelbase={d.L} height={370} />
+          <div style={{ padding: '0 12px 4px' }}>
+            <Slider
+              label="Time"
+              unit="s"
+              value={cursor}
+              min={0}
+              max={Math.max(path.length - 1, 1)}
+              step={1}
+              display={`${now?.t.toFixed(3) ?? '0'} s`}
+              onChange={(v) => {
+                setPlaying(false)
+                setCursor(v)
+              }}
+            />
+          </div>
+          <Readouts>
+            <Readout label="Rotated (heading)" value={toDeg(now?.heading ?? 0).toFixed(2)} unit="deg" />
+            <Readout
+              label="Direction of travel"
+              value={toDeg(now?.course ?? 0).toFixed(2)}
+              unit="deg"
+              tone="accent"
+            />
+            <Readout
+              label="Sideslip β"
+              value={toDeg(now?.beta ?? 0).toFixed(2)}
+              unit="deg"
+              tone={(now?.beta ?? 0) > 0 ? 'warn' : 'front'}
+            />
+            <Readout label="Yaw rate" value={(now?.yawRate ?? 0).toFixed(3)} unit="rad/s" />
+            <Readout label="Lateral accel" value={(now?.ay ?? 0).toFixed(3)} unit="g" />
+            <Readout
+              label="Distance travelled"
+              value={(speed * (now?.t ?? 0)).toFixed(1)}
+              unit="m"
+            />
+          </Readouts>
+        </Panel>
+
+        <Panel title="Try these" reference="guided">
+          <TryThis experiments={experiments} />
+        </Panel>
+
         <Panel
           title={`Step steer response — ${STEER_DEG}° at ${speed.toFixed(0)} m/s`}
           reference="Ch 6 §4"

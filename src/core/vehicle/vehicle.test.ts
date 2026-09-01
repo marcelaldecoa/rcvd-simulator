@@ -12,8 +12,10 @@ import { describe, expect, it } from 'vitest'
 import { G, toRad } from '../util/numeric.js'
 import { EXERCISE_6_1, FORMULA_CAR, derive, type BicycleVehicle } from './params.js'
 import {
+  axleLimits,
   basicBudgetLine,
   constantRadiusSweep,
+  nonlinearTrim,
   nonlinearConstantRadiusSweep,
   responseAtSpeed,
   stabilityFactor,
@@ -27,7 +29,8 @@ import {
   modal,
   secondOrderOvershoot,
   secondOrderSettlingTime,
-  stepSteer
+  stepSteer,
+  trajectory
 } from './transient.js'
 import { MagicFormulaTire, DEFAULT_MF } from '../tire/magicFormula.js'
 import { scaleTire } from '../tire/scale.js'
@@ -381,3 +384,162 @@ describe('Ch 5 closing section - K is not a constant', () => {
     expect(ks[ks.length - 1]).toBeGreaterThan(5 * ks[0])
   })
 })
+
+describe('nonlinear trim - what the cornering diagram draws', () => {
+  const tire = new MagicFormulaTire(DEFAULT_MF)
+  const rearTire = new MagicFormulaTire(scaleTire(DEFAULT_MF, 1.3))
+
+  it('satisfies the steady-state cornering equation exactly', () => {
+    const { L } = derive(FORMULA_CAR)
+    for (const ay of [0.3, 0.8, 1.2]) {
+      const t = nonlinearTrim(FORMULA_CAR, tire, rearTire, 40, ay)
+      // delta = L/R + (alpha_f - alpha_r), by construction and by Ch 5
+      expect(t.steer).toBeCloseTo(L / t.radius + (t.alphaF - t.alphaR), 12)
+    }
+  })
+
+  it('agrees with linear theory at low lateral acceleration', () => {
+    // Build a linear car matched to these tires, then compare at small Ay
+    // where the tires are still in their linear range.
+    const { wf, wr } = derive(FORMULA_CAR)
+    const v: BicycleVehicle = {
+      ...FORMULA_CAR,
+      cf: 2 * tire.corneringStiffness(wf / 2),
+      cr: 2 * rearTire.corneringStiffness(wr / 2)
+    }
+    const ay = 0.1
+    const nl = nonlinearTrim(v, tire, rearTire, 40, ay)
+    const lin = trimFromSteer(v, 40, nl.steer)
+    expect(lin.ay).toBeCloseTo(ay, 2)
+    expect(lin.beta).toBeCloseTo(nl.beta, 3)
+    expect(lin.alphaF).toBeCloseTo(nl.alphaF, 3)
+    expect(lin.alphaR).toBeCloseTo(nl.alphaR, 3)
+  })
+
+  it('reaches exactly 100% usage on the limiting axle at the limit', () => {
+    const limits = axleLimits(FORMULA_CAR, tire, rearTire)
+    const t = nonlinearTrim(FORMULA_CAR, tire, rearTire, 40, limits.limitAy)
+    const usage = limits.limitingAxle === 'front' ? t.usageFront : t.usageRear
+    expect(usage).toBeCloseTo(1, 6)
+    const other = limits.limitingAxle === 'front' ? t.usageRear : t.usageFront
+    expect(other).toBeLessThanOrEqual(1 + 1e-9)
+  })
+
+  it('makes the limiting axle the one with the lower normalised peak', () => {
+    const limits = axleLimits(FORMULA_CAR, tire, rearTire)
+    const expected = limits.limitAyFront <= limits.limitAyRear ? 'front' : 'rear'
+    expect(limits.limitingAxle).toBe(expected)
+  })
+
+  it('flips the limiting axle when the rear tires are shrunk', () => {
+    const small = new MagicFormulaTire(scaleTire(DEFAULT_MF, 0.7))
+    const staggered = axleLimits(FORMULA_CAR, tire, rearTire)
+    const rearLimited = axleLimits(FORMULA_CAR, tire, small)
+    expect(staggered.limitingAxle).toBe('front')
+    expect(rearLimited.limitingAxle).toBe('rear')
+  })
+
+  it('grows both slip angles monotonically with lateral acceleration', () => {
+    let prevF = -1
+    let prevR = -1
+    const limit = axleLimits(FORMULA_CAR, tire, rearTire).limitAy
+    for (let i = 0; i <= 20; i++) {
+      const t = nonlinearTrim(FORMULA_CAR, tire, rearTire, 40, (limit * i) / 20)
+      expect(t.alphaF).toBeGreaterThanOrEqual(prevF)
+      expect(t.alphaR).toBeGreaterThanOrEqual(prevR)
+      prevF = t.alphaF
+      prevR = t.alphaR
+    }
+  })
+
+  it('goes straight at zero lateral acceleration', () => {
+    const t = nonlinearTrim(FORMULA_CAR, tire, rearTire, 40, 0)
+    expect(t.steer).toBeCloseTo(0, 9)
+    expect(t.beta).toBeCloseTo(0, 9)
+    expect(t.radius).toBe(Infinity)
+  })
+})
+
+describe('Ch 6 - the path the car actually traces', () => {
+  const v = EXERCISE_6_1
+  const speed = 30
+  const steer = toRad(2)
+
+  it('settles onto a circle of the steady-state radius', () => {
+    const step = stepSteer(v, speed, steer, 8, 0.0005)
+    const path = trajectory(step, speed)
+    // Curvature from the path itself, late in the response.
+    const n = path.length
+    const [p0, p1, p2] = [path[n - 400], path[n - 200], path[n - 1]]
+    const curvatureRadius = circumRadius(p0, p1, p2)
+    expect(curvatureRadius).toBeCloseTo(speed / step.yawSteady, 0)
+  })
+
+  it('slides before it rotates: course leads heading at the very start', () => {
+    // Yaw rate integrates up from zero, so heading grows as t^2. Lateral
+    // velocity also integrates from zero, so beta grows as t -- linear beats
+    // quadratic. The first thing a step steer does is translate the car
+    // sideways; the rotation catches up and then dominates.
+    const path = trajectory(stepSteer(v, speed, steer, 3, 0.0002), speed)
+    const veryEarly = path.find((p) => p.t >= 0.01)!
+    expect(veryEarly.course).toBeGreaterThan(veryEarly.heading)
+
+    const settled = path[path.length - 1]
+    expect(settled.heading).toBeGreaterThan(settled.course)
+  })
+
+  it('reverses sideslip during the transient above the tangent speed', () => {
+    // Steady-state beta is negative at 30 m/s (well above this car's 15.9 m/s
+    // tangent speed), but the rear axle needs time to build its slip angle, so
+    // beta starts POSITIVE and swings through zero. The nose points out of the
+    // corner, then into it -- during a single step input.
+    expect(summarise(v).tangentSpeed).toBeLessThan(speed)
+    const path = trajectory(stepSteer(v, speed, steer, 3, 0.0002), speed)
+    expect(path.find((p) => p.t >= 0.02)!.beta).toBeGreaterThan(0)
+    expect(path[path.length - 1].beta).toBeLessThan(0)
+  })
+
+  it('keeps sideslip positive throughout below the tangent speed', () => {
+    const slow = 8
+    expect(summarise(v).tangentSpeed).toBeGreaterThan(slow)
+    const path = trajectory(stepSteer(v, slow, steer, 4, 0.0005), slow)
+    expect(path[path.length - 1].beta).toBeGreaterThan(0)
+  })
+
+  it('advances at constant speed along the course direction', () => {
+    const step = stepSteer(v, speed, steer, 2, 0.0005)
+    const path = trajectory(step, speed)
+    for (let i = 1; i < path.length; i += 250) {
+      const dt = path[i].t - path[i - 1].t
+      const ds = Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y)
+      expect(ds / dt).toBeCloseTo(speed, 3)
+    }
+  })
+
+  it('turns the way the steer input asks', () => {
+    const left = trajectory(stepSteer(v, speed, steer, 2, 0.001), speed)
+    const right = trajectory(stepSteer(v, speed, -steer, 2, 0.001), speed)
+    expect(left[left.length - 1].y).toBeGreaterThan(0)
+    expect(right[right.length - 1].y).toBeLessThan(0)
+  })
+
+  it('starts at the origin pointing straight ahead', () => {
+    const path = trajectory(stepSteer(v, speed, steer, 1, 0.001), speed)
+    expect(path[0].x).toBe(0)
+    expect(path[0].y).toBe(0)
+    expect(path[0].heading).toBe(0)
+  })
+})
+
+/** Radius of the circle through three points -- used to measure path curvature. */
+function circumRadius(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  c: { x: number; y: number }
+): number {
+  const ab = Math.hypot(b.x - a.x, b.y - a.y)
+  const bc = Math.hypot(c.x - b.x, c.y - b.y)
+  const ca = Math.hypot(a.x - c.x, a.y - c.y)
+  const area = Math.abs((b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y)) / 2
+  return area < 1e-12 ? Infinity : (ab * bc * ca) / (4 * area)
+}
