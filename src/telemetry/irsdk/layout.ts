@@ -320,3 +320,26 @@ export function buildTestBuffer(opts: {
 
   return buf
 }
+
+/**
+ * The smallest region that contains everything a header points at.
+ *
+ * Needed because the live source must not ask Windows for a view of a size it
+ * invented. `MapViewOfFile` fails outright when the requested view exceeds the
+ * mapping, and it fails with ACCESS_DENIED -- which reads exactly like "iRacing
+ * is not running" to a caller that does not check the error code. Mapping the
+ * whole region and then asking how big it turned out to be is the correct
+ * order; this function is the fallback for when that answer is unavailable.
+ *
+ * Every offset in the header is a lower bound on the size, so the answer is
+ * simply the furthest reach of any of them.
+ */
+export function requiredBytes(header: IrsdkHeader): number {
+  let end = HEADER_SIZE
+  end = Math.max(end, header.sessionInfoOffset + header.sessionInfoLength)
+  end = Math.max(end, header.varHeaderOffset + header.numVars * VAR_HEADER_SIZE)
+  for (let i = 0; i < Math.min(header.numBuf, header.buffers.length); i++) {
+    end = Math.max(end, header.buffers[i].bufOffset + header.bufLen)
+  }
+  return end
+}

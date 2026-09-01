@@ -24,6 +24,7 @@ import {
   readVar,
   readVarHeaders,
   recordLength,
+  requiredBytes,
   sizeOf
 } from './layout.js'
 import {
@@ -443,5 +444,55 @@ describe('.ibt session files', () => {
     expect(readVarHeaders(live, lh).map((v) => v.name)).toEqual(
       readVarHeaders(buf, fh).map((v) => v.name)
     )
+  })
+})
+
+describe('required region size', () => {
+  /**
+   * The bug this pins cost a debugging session against a live sim.
+   *
+   * The shared-memory reader used to ask Windows for a view of a FIXED 2 MB.
+   * iRacing's mapping is not a fixed size -- it is dominated by the session
+   * string, which grows with the car count -- and at Richmond it was 1.19 MB.
+   * MapViewOfFile refuses a view larger than the mapping, and the error it
+   * returns is ACCESS_DENIED, which is indistinguishable from "not running" to
+   * code that never reads it. The app insisted iRacing was closed while it was
+   * running perfectly.
+   *
+   * So: never invent a size. This is the arithmetic that derives one honestly.
+   */
+  const build = (sessionInfo: string): Buffer =>
+    buildTestBuffer({
+      sessionInfo,
+      vars: [
+        { name: 'Speed', type: VarType.Float, values: [40, 41, 42] },
+        { name: 'YawRate', type: VarType.Float, values: [0.1, 0.2, 0.3] }
+      ]
+    })
+
+  it('covers everything the header points at', () => {
+    const buf = build('a'.repeat(4096))
+    const header = readHeader(buf)
+    const need = requiredBytes(header)
+
+    expect(need).toBeGreaterThanOrEqual(header.sessionInfoOffset + header.sessionInfoLength)
+    expect(need).toBeGreaterThanOrEqual(header.varHeaderOffset + header.numVars * VAR_HEADER_SIZE)
+    for (let i = 0; i < header.numBuf; i++) {
+      expect(need).toBeGreaterThanOrEqual(header.buffers[i].bufOffset + header.bufLen)
+    }
+    // Everything it points at is inside the buffer it came from.
+    expect(need).toBeLessThanOrEqual(buf.length)
+  })
+
+  it('tracks the session string rather than assuming a constant', () => {
+    const small = requiredBytes(readHeader(build('x'.repeat(1024))))
+    const large = requiredBytes(readHeader(build('x'.repeat(65536))))
+    // The whole reason a fixed size is wrong: this number moves with the
+    // session, so a constant is either too small or -- fatally -- too large.
+    expect(large - small).toBe(65536 - 1024)
+  })
+
+  it('is never smaller than the header itself', () => {
+    expect(requiredBytes(readHeader(build('')))).toBeGreaterThanOrEqual(HEADER_SIZE)
   })
 })

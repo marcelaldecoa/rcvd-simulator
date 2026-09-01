@@ -14,6 +14,7 @@
  */
 
 import {
+  HEADER_SIZE,
   indexVars,
   readHeader,
   readVarHeaders,
@@ -21,7 +22,7 @@ import {
   type VarHeader
 } from './irsdk/layout.js'
 import { SharedMemoryReader } from './irsdk/shm.js'
-import { DEFAULT_SIGNS, mapSample, type SignConvention } from './irsdk/channels.js'
+import { CHANNELS, DEFAULT_SIGNS, mapSample, type SignConvention } from './irsdk/channels.js'
 import type {
   SessionInfo,
   SetupSnapshot,
@@ -106,6 +107,19 @@ export class LiveIRacingSource implements TelemetrySource {
     return () => this.listeners.delete(onSample)
   }
 
+  /**
+   * Which of the channels this app reads the sim is NOT publishing.
+   *
+   * Worth asking directly. A missing channel reads downstream as a constant
+   * zero, which is indistinguishable from a car that simply is not moving --
+   * so inferring it from the data gives a false alarm on every stationary car
+   * and stays silent on the one case that matters.
+   */
+  missingChannels(): string[] {
+    if (!this.header) return []
+    return Object.values(CHANNELS).filter((name) => !this.vars.has(name))
+  }
+
   /** The steering ratio in use, so a caller can display or override it. */
   get ratio(): number {
     return this.steeringRatio
@@ -161,7 +175,15 @@ export class LiveIRacingSource implements TelemetrySource {
 
   private startLoop(): void {
     if (this.loop) return
-    const period = this.opts.pollMs ?? 1000 / 60
+    // Poll at twice the tick rate and dedupe on tickCount, rather than blocking
+    // on iRacing's data-ready event.
+    //
+    // The event is the obvious tool and it is the wrong one HERE: this runs in
+    // Electron's main process, so a blocking wait stalls IPC and window
+    // painting along with it. Measured against a live session, waiting cost a
+    // quarter of the samples -- 45 Hz out of 60 -- while also making the UI
+    // answer late. Polling costs a 112-byte read at 120 Hz, which is nothing.
+    const period = this.opts.pollMs ?? 1000 / 120
     this.loop = setInterval(() => this.tick(), period)
   }
 
@@ -175,18 +197,18 @@ export class LiveIRacingSource implements TelemetrySource {
    */
   private tick(): void {
     if (!this.header) return
-    // The event, when present, means this thread sleeps rather than spins.
-    if (this.shm.hasDataEvent) this.shm.waitForData(32)
 
-    const buf = this.shm.read()
-    if (!buf) {
+    // Only the header, not the whole region: the mapping is over a megabyte,
+    // almost all of it the session string, and none of that changes per tick.
+    const head = this.shm.readRange(0, HEADER_SIZE)
+    if (!head) {
       this.header = null
       this.detail = 'iRacing closed'
       this.stopLoop()
       return
     }
 
-    const header = readHeader(buf)
+    const header = readHeader(head)
     this.header = header
     if ((header.status & STATUS_CONNECTED) === 0) {
       this.detail = 'iRacing running, but no session is live'
@@ -200,8 +222,8 @@ export class LiveIRacingSource implements TelemetrySource {
     if (best.tickCount === this.lastTick) return
     this.lastTick = best.tickCount
 
-    const record = buf.subarray(best.bufOffset, best.bufOffset + header.bufLen)
-    if (record.length < header.bufLen) return
+    const record = this.shm.readRange(best.bufOffset, header.bufLen)
+    if (!record || record.length < header.bufLen) return
 
     const sample = mapSample(record, this.vars, {
       steeringRatio: this.steeringRatio,
