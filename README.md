@@ -232,6 +232,25 @@ you are driving. The observed estimate deliberately requires evidence on *both
 sides* of a candidate peak — the highest angle you happened to visit is not a
 peak, and that is the commonest way this could lie to you.
 
+### Stopped, and stationary
+
+<p align="center">
+  <img src="docs/images/overlay-stationary.png" width="300" alt="Overlay showing the stationary state">
+</p>
+
+Below about 11 km/h the box says **stationary** and shows nothing else. That is
+deliberate, and it is the honest answer rather than a missing feature.
+
+Every angle the overlay draws is built on `a·r/V` and `atan2(vy, vx)`, and both
+fall apart as `V` goes to zero — the first by dividing by it, the second because
+the arctangent of two near-zero numbers is arbitrary. A parked car still reports
+a little yaw-sensor noise, so a naive division turns microradians into hundreds
+of degrees of slip. The box would show vivid, confident, entirely fictional
+readings while the car sat still in its pit box.
+
+The alternative of showing a calm green **NEUTRAL** would be worse, not better:
+that is a claim about the car, made when there is nothing to base it on.
+
 ### If nothing appears
 
 <p align="center">

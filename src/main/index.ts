@@ -92,7 +92,8 @@ function toOverlayView(r: OverlayReading): Record<string, unknown> {
     alphaRear: r.state.alphaRear,
     beta: r.state.beta,
     ay: r.state.ay,
-    speed: r.state.speed
+    speed: r.state.speed,
+    valid: r.valid
   }
 }
 

@@ -11,6 +11,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   LimitTracker,
+  MIN_KINEMATIC_SPEED,
   OverlayPipeline,
   SideslipEstimator,
   StateFilter,
@@ -178,6 +179,7 @@ describe('finding the limit without being told where it is', () => {
     ax: 0,
     yawRate: 0.3,
     steer: 0.05,
+    valid: true,
     radius: 100
   })
 
@@ -247,6 +249,7 @@ describe('what the driver sees', () => {
     ax: 0,
     yawRate: 0.3,
     steer: 0.05,
+    valid: true,
     radius: 100
   })
 
@@ -347,5 +350,115 @@ describe('the pipeline end to end', () => {
     expect(p.limits().front.source).toBe('model')
     p.reset()
     expect(p.limits().front.source).toBe('model')
+  })
+})
+
+describe('a car that is not moving', () => {
+  /**
+   * The overlay went haywire in the pit box, and the reason is arithmetic
+   * rather than a wiring mistake.
+   *
+   * Every slip angle here is built on `a*r/V`. The old code floored V at 1e-6
+   * to avoid dividing by zero, which does avoid the exception and does nothing
+   * about the real problem: at a standstill the yaw channel still carries a few
+   * microradians per second of sensor noise, and dividing that by 1e-6 is a
+   * million-fold amplifier. The box showed hundreds of degrees of slip,
+   * flickering between understeer and oversteer, for a parked car.
+   *
+   * These tests are written against NOISE rather than against exact zeros,
+   * because exact zeros would have passed on the broken code too.
+   */
+  const parked = (yawNoise: number, steerNoise = 0): TelemetrySample => ({
+    t: 0,
+    speed: 0,
+    ax: -0.01,
+    ay: -0.1,
+    yawRate: yawNoise,
+    steer: steerNoise,
+    throttle: 0,
+    brake: 0,
+    lapDistPct: 0,
+    lap: 1,
+    lateralVelocity: 1e-5
+  })
+
+  it('does not amplify yaw noise into slip angle', () => {
+    // A hundredth of a degree per second of noise -- less than a real sensor.
+    const state = toVehicleState(parked(toRad(0.01)), geometry, 0)
+    expect(state.valid).toBe(false)
+    expect(Math.abs(toDeg(state.alphaFront))).toBeLessThan(0.001)
+    expect(Math.abs(toDeg(state.alphaRear))).toBeLessThan(0.001)
+  })
+
+  it('stays quiet however the noise happens to fall', () => {
+    // The old failure was not a constant offset, it was random: the sign and
+    // size followed the noise. So sweep it.
+    for (let i = -20; i <= 20; i++) {
+      const state = toVehicleState(parked(i * 1e-5, i * 1e-4), geometry, 0)
+      expect(state.valid).toBe(false)
+      expect(Math.abs(toDeg(state.alphaFront))).toBeLessThan(0.001)
+      expect(Math.abs(toDeg(state.alphaRear))).toBeLessThan(0.001)
+    }
+  })
+
+  it('reports that it is not measuring, rather than a verdict', () => {
+    const state = toVehicleState(parked(toRad(0.01)), geometry, 0)
+    const limit = { peakSlipAngle: toRad(6), source: 'observed' as const, confidence: 100 }
+    const reading = toReading(state, limit, limit)
+
+    expect(reading.valid).toBe(false)
+    expect(reading.usage).toBe(0)
+    // Crucially NOT 'NEUTRAL'. A green box reading NEUTRAL at a standstill is
+    // the overlay asserting the car is balanced when it has no idea.
+    expect(reading.text).not.toBe('NEUTRAL')
+  })
+
+  it('will not let the limit tracker learn from it', () => {
+    const tracker = new LimitTracker({ modelPeakFront: toRad(6), modelPeakRear: toRad(7) })
+    // A spin in the pit lane: real lateral acceleration, no valid angles.
+    for (let i = 0; i < 500; i++) {
+      tracker.observe({
+        t: i / 60,
+        speed: 1,
+        beta: 0,
+        alphaFront: 0,
+        alphaRear: 0,
+        ay: 0.9,
+        ax: 0,
+        yawRate: 1.2,
+        steer: 0.1,
+        radius: Infinity,
+        valid: false
+      })
+    }
+    // If these had been recorded, the zero bin would hold 0.9 g and the
+    // estimator would conclude the front axle peaks at no slip angle at all.
+    expect(tracker.front().source).toBe('model')
+    expect(tracker.rear().source).toBe('model')
+  })
+
+  it('picks up again cleanly once the car is moving', () => {
+    const pipeline = new OverlayPipeline(geometry, {
+      modelPeakFront: toRad(6),
+      modelPeakRear: toRad(7)
+    })
+    // Sit still for a second, then drive.
+    for (let i = 0; i < 60; i++) {
+      const r = pipeline.push({ ...parked(toRad(0.02)), t: i / 60 })
+      expect(r.valid).toBe(false)
+    }
+    const { sample, expected } = sampleFromTrim(35, 3)
+    const after = pipeline.push({ ...sample, t: 2 })
+
+    expect(after.valid).toBe(true)
+    // The filter must not be easing out of the run of zeros: the first moving
+    // reading should already be the real angle, not a fraction of it.
+    expect(toDeg(after.state.alphaFront)).toBeCloseTo(toDeg(expected.alphaFront), 6)
+  })
+
+  it('agrees with the constant it is documented against', () => {
+    expect(toVehicleState({ ...parked(0), speed: MIN_KINEMATIC_SPEED - 0.01 }, geometry, 0).valid)
+      .toBe(false)
+    expect(toVehicleState({ ...parked(0), speed: MIN_KINEMATIC_SPEED }, geometry, 0).valid).toBe(true)
   })
 })

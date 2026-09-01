@@ -23,6 +23,7 @@ const SHOTS = [
     name: 'overlay-under',
     config: { enabled: true, width: 320, height: 260, textScale: 1, opacity: 1, locked: true },
     reading: {
+      valid: true,
       balance: 'neutral',
       text: 'NEUTRAL',
       zone: 'under',
@@ -42,6 +43,7 @@ const SHOTS = [
     name: 'overlay-at-limit',
     config: { enabled: true, width: 320, height: 260, textScale: 1, opacity: 1, locked: true },
     reading: {
+      valid: true,
       balance: 'understeer',
       text: 'UNDERSTEER',
       zone: 'at',
@@ -61,6 +63,7 @@ const SHOTS = [
     name: 'overlay-over',
     config: { enabled: true, width: 320, height: 260, textScale: 1, opacity: 1, locked: true },
     reading: {
+      valid: true,
       balance: 'oversteer',
       text: 'OVERSTEER',
       zone: 'over',
@@ -80,6 +83,7 @@ const SHOTS = [
     name: 'overlay-learning',
     config: { enabled: true, width: 320, height: 260, textScale: 1, opacity: 1, locked: true },
     reading: {
+      valid: true,
       balance: 'understeer',
       text: 'UNDERSTEER',
       zone: 'under',
@@ -99,6 +103,7 @@ const SHOTS = [
     name: 'overlay-large-text',
     config: { enabled: true, width: 420, height: 320, textScale: 1.6, opacity: 1, locked: true },
     reading: {
+      valid: true,
       balance: 'understeer',
       text: 'UNDERSTEER',
       zone: 'at',
@@ -112,6 +117,28 @@ const SHOTS = [
       beta: -2.2 * DEG,
       ay: 1.44,
       speed: 39
+    }
+  },
+  {
+    // The state that prompted all this: parked in the box. It must say it is
+    // not measuring, not show a confident green NEUTRAL.
+    name: 'overlay-stationary',
+    config: { enabled: true, width: 320, height: 260, textScale: 1, opacity: 1, locked: true },
+    reading: {
+      valid: false,
+      balance: 'neutral',
+      text: '—',
+      zone: 'under',
+      usage: 0,
+      usageFront: 0,
+      usageRear: 0,
+      limitingAxle: 'front',
+      provisional: true,
+      alphaFront: 0,
+      alphaRear: 0,
+      beta: 0,
+      ay: -0.01,
+      speed: 0
     }
   },
   {

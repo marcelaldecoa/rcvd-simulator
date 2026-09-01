@@ -30,6 +30,8 @@ export interface OverlayReadingView {
   usageRear: number
   limitingAxle: 'front' | 'rear'
   provisional: boolean
+  /** False when the car is too slow for the reading to mean anything. */
+  valid: boolean
   alphaFront: number
   alphaRear: number
   beta: number
@@ -136,7 +138,10 @@ export function drawOverlay(
   const { width: W, height: H, textScale: k } = config
   ctx.clearRect(0, 0, W, H)
 
-  const colour = reading ? usageColour(reading.usage) : FAINT
+  // A reading that is not valid gets the same muted treatment as no reading at
+  // all. Colouring it green would be the overlay claiming the car is fine.
+  const live = reading !== null && reading.valid
+  const colour = live ? usageColour(reading.usage) : FAINT
   const pad = 10
 
   // Backing panel. Dark and slightly translucent so it reads over any track
@@ -148,16 +153,31 @@ export function drawOverlay(
   ctx.lineWidth = 2
   ctx.stroke()
 
-  if (!reading) {
+  if (!live) {
+    // Three ways to have nothing to show, and the driver needs to tell them
+    // apart: not connected at all, connected but no samples yet, and connected
+    // and sampling but the car is not moving fast enough to measure. The last
+    // is the common one -- it is every pit box and every grid slot -- and
+    // reporting it as an error would train the driver to ignore the box.
+    const stationary = reading !== null && !reading.valid
+    const headline = stationary
+      ? 'stationary'
+      : status.connected
+        ? 'waiting for data'
+        : 'not connected'
+    const detail = stationary
+      ? 'slip angles need road speed — nothing to measure below about 11 km/h'
+      : status.detail
+
     ctx.fillStyle = DIM
     ctx.font = `${13 * k}px Inter, "Segoe UI", system-ui, sans-serif`
     ctx.textAlign = 'center'
-    ctx.fillText(status.connected ? 'waiting for data' : 'not connected', W / 2, H / 2 - 6 * k)
+    ctx.fillText(headline, W / 2, H / 2 - 6 * k)
     ctx.fillStyle = FAINT
     ctx.font = `${10 * k}px Inter, "Segoe UI", system-ui, sans-serif`
     // The detail line is the difference between a user who can fix it and one
     // who cannot, so it is worth the space even in the empty state.
-    wrapText(ctx, status.detail, W / 2, H / 2 + 12 * k, W - 2 * pad, 12 * k)
+    wrapText(ctx, detail, W / 2, H / 2 + 12 * k, W - 2 * pad, 12 * k)
     ctx.textAlign = 'left'
     return
   }
