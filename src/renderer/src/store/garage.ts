@@ -24,6 +24,19 @@ import {
   type AxleCompliance,
   type SuspensionCompliance
 } from '@core/vehicle/understeerBudget.js'
+import {
+  FORMULA_RATES,
+  rollStiffnessForChassis,
+  type CornerRates,
+  type SuspensionRates
+} from '@core/vehicle/rates.js'
+import { RACE_WISHBONE, type WishboneGeometry } from '@core/vehicle/geometry.js'
+import { FORMULA_STEERING, type SteeringParams } from '@core/vehicle/steering.js'
+import {
+  RACE_COMPLIANCE_TARGETS,
+  type ComplianceTargets
+} from '@core/vehicle/compliance.js'
+import { CIRCUIT_DIFF, type DiffSetup, type DriveLayout } from '@core/performance/driveline.js'
 import { DEFAULT_POWERTRAIN, type PowertrainParams } from '@core/performance/gg.js'
 
 export type UnitSystem = 'SI' | 'Imperial'
@@ -99,6 +112,27 @@ interface GarageState {
    * cannot fill in its own table: the rows come from four other chapters.
    */
   compliance: SuspensionCompliance
+  /**
+   * Springs, bars, tyres and installation ratios -- Ch 16.
+   *
+   * The roll stiffnesses in `chassis` are a CONSEQUENCE of these, not an
+   * independent setting. They are kept separate and pushed across explicitly by
+   * `applyRatesToChassis`, for the same reason `syncStiffnessFromTire` is
+   * explicit: making a derivation visible is most of its teaching value.
+   */
+  rates: SuspensionRates
+  /** Front and rear wishbone geometry -- Ch 17. */
+  geometryFront: WishboneGeometry
+  geometryRear: WishboneGeometry
+  /** Steering system -- Ch 19. */
+  steering: SteeringParams
+  /** Structural compliance targets -- Ch 23. */
+  complianceTargets: ComplianceTargets
+  /** Differential setup and drive layout -- Ch 20. */
+  diff: DiffSetup
+  driveLayout: DriveLayout
+  /** Front brake bias, 0-1. */
+  brakeBias: number
   /** Engine and braking, for the g-g envelope -- Ch 9. */
   powertrain: PowertrainParams
   units: UnitSystem
@@ -113,6 +147,23 @@ interface GarageState {
   setChassis: (c: Partial<ChassisParams>) => void
   setAero: (a: Partial<AeroParams>) => void
   setCompliance: (axle: 'front' | 'rear', patch: Partial<AxleCompliance>) => void
+  setRates: (patch: Partial<SuspensionRates>) => void
+  setCornerRates: (axle: 'front' | 'rear', patch: Partial<CornerRates>) => void
+  setGeometry: (axle: 'front' | 'rear', patch: Partial<WishboneGeometry>) => void
+  setSteering: (patch: Partial<SteeringParams>) => void
+  setComplianceTargets: (patch: Partial<ComplianceTargets>) => void
+  setDiff: (patch: Partial<DiffSetup>) => void
+  setDriveLayout: (l: DriveLayout) => void
+  setBrakeBias: (b: number) => void
+  /**
+   * Push the roll stiffnesses the current springs, bars and tyres imply into
+   * `chassis`, where Ch 18, Ch 7 and Ch 8 will read them.
+   *
+   * The counterpart of `syncStiffnessFromTire`, and explicit for the same
+   * reason: roll stiffness is a consequence of the setup sheet, and watching
+   * the number arrive from Ch 16 is the point of having built Ch 16.
+   */
+  applyRatesToChassis: () => void
   setPowertrain: (p: Partial<PowertrainParams>) => void
   setUnits: (u: UnitSystem) => void
   /**
@@ -140,6 +191,18 @@ export const useGarage = create<GarageState>((set, get) => ({
     front: { ...FORMULA_COMPLIANCE.front },
     rear: { ...FORMULA_COMPLIANCE.rear }
   },
+  rates: {
+    ...FORMULA_RATES,
+    front: { ...FORMULA_RATES.front },
+    rear: { ...FORMULA_RATES.rear }
+  },
+  geometryFront: { ...RACE_WISHBONE },
+  geometryRear: { ...RACE_WISHBONE, track: 1.55 },
+  steering: { ...FORMULA_STEERING },
+  complianceTargets: { ...RACE_COMPLIANCE_TARGETS },
+  diff: { ...CIRCUIT_DIFF },
+  driveLayout: 'rwd',
+  brakeBias: 0.62,
   powertrain: { ...DEFAULT_POWERTRAIN },
   units: 'SI',
 
@@ -156,6 +219,33 @@ export const useGarage = create<GarageState>((set, get) => ({
     set((s) => ({
       compliance: { ...s.compliance, [axle]: { ...s.compliance[axle], ...patch } }
     })),
+  setRates: (patch) => set((s) => ({ rates: { ...s.rates, ...patch } })),
+  setCornerRates: (axle, patch) =>
+    set((s) => ({ rates: { ...s.rates, [axle]: { ...s.rates[axle], ...patch } } })),
+  setGeometry: (axle, patch) =>
+    set((s) =>
+      axle === 'front'
+        ? { geometryFront: { ...s.geometryFront, ...patch } }
+        : { geometryRear: { ...s.geometryRear, ...patch } }
+    ),
+  setSteering: (patch) => set((s) => ({ steering: { ...s.steering, ...patch } })),
+  setComplianceTargets: (patch) =>
+    set((s) => ({ complianceTargets: { ...s.complianceTargets, ...patch } })),
+  setDiff: (patch) => set((s) => ({ diff: { ...s.diff, ...patch } })),
+  setDriveLayout: (driveLayout) => set({ driveLayout }),
+  setBrakeBias: (brakeBias) => set({ brakeBias }),
+
+  applyRatesToChassis: () => {
+    const { chassis, rates } = get()
+    set({
+      chassis: {
+        ...chassis,
+        ...rollStiffnessForChassis(rates),
+        trackFront: rates.trackFront,
+        trackRear: rates.trackRear
+      }
+    })
+  },
   setPowertrain: (p) => set((s) => ({ powertrain: { ...s.powertrain, ...p } })),
   setUnits: (units) => set({ units }),
 

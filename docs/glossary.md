@@ -163,6 +163,7 @@ Symbols follow the book's notation. | Os símbolos seguem a notação do livro.
 | Roll axis / neutral roll axis | Eixo de rolagem | NRA | Linha entre os centros de rolagem |
 | Roll moment arm | Braço de momento de rolagem | $H$ | Do CG suspenso ao eixo de rolagem |
 | Roll stiffness | Rigidez à rolagem | $K_\phi$ | N·m/rad |
+| Bar mount compliance | Complacência da fixação da barra | — | Em série com a barra; impõe um teto |
 | Roll gradient | Gradiente de rolagem | — | deg/g |
 | Roll angle | Ângulo de rolagem | $\phi$ | |
 | Geometric load transfer | Transferência geométrica | — | Pelos braços da suspensão |
@@ -183,6 +184,8 @@ Symbols follow the book's notation. | Os símbolos seguem a notação do livro.
 | Wheel rate | Rigidez na roda | $K_w$ | $K_w = K_s \cdot IR^2$ |
 | Ride rate | Rigidez vertical total | $K_R$ | Inclui o pneu em série |
 | Ride frequency | Frequência de suspensão | — | Hz |
+| Flat ride | Marcha plana | — | Critério de Olley: traseira 10-20% acima da dianteira |
+| Axle roll rate | Rigidez à rolagem do eixo | $K_\phi = K_R t^2/2$ | Molas mais barra, referidas às rodas |
 | Installation ratio | Razão de instalação | $IR$ | ⚑ também "motion ratio" |
 | Damper / shock absorber | Amortecedor | — | |
 | Damping | Amortecimento | $C$ | |
@@ -219,6 +222,8 @@ Symbols follow the book's notation. | Os símbolos seguem a notação do livro.
 | Steering torque / feel | Torque na direção / feedback | — | ⚑ "feedback" |
 | Rack | Cremalheira | — | |
 | Brake bias | Distribuição de frenagem | — | ⚑ "bias de freio" |
+| Balance bar | Barra de balanço dos freios | — | Ajusta a razão de pressão dianteira/traseira |
+| Ideal brake bias | Distribuição ideal de frenagem | $b/L + A_x h/L$ | Sobe com a desaceleração |
 | Braking | Frenagem | — | |
 | Traction | Tração | — | |
 | Traction limit | Limite de tração | — | |

@@ -13,6 +13,11 @@ import { SteadyStateLab } from './labs/SteadyStateLab'
 import { TransientLab } from './labs/TransientLab'
 import { PairAnalysisLab } from './labs/PairAnalysisLab'
 import { MomentMethodLab } from './labs/MomentMethodLab'
+import { RatesLab } from './labs/RatesLab'
+import { GeometryLab } from './labs/GeometryLab'
+import { SteeringLab } from './labs/SteeringLab'
+import { DrivelineLab } from './labs/DrivelineLab'
+import { ComplianceLab } from './labs/ComplianceLab'
 import { WheelLoadsLab } from './labs/WheelLoadsLab'
 import { useGarage } from './store/garage'
 import { summarise } from '@core/vehicle/steadyState.js'
@@ -35,6 +40,16 @@ function LabFor({ chapter }: { chapter: Chapter }): React.JSX.Element {
       return <PairAnalysisLab />
     case 'mmm':
       return <MomentMethodLab />
+    case 'rates':
+      return <RatesLab />
+    case 'geometry':
+      return <GeometryLab />
+    case 'steering':
+      return <SteeringLab />
+    case 'driveline':
+      return <DrivelineLab />
+    case 'compliance':
+      return <ComplianceLab />
     case 'wheelLoads':
       return <WheelLoadsLab />
     case 'glossary':
@@ -51,8 +66,9 @@ function LabFor({ chapter }: { chapter: Chapter }): React.JSX.Element {
           <h3>No interactive lab for this chapter yet</h3>
           {chapter.blurb && <div>{chapter.blurb}</div>}
           <div style={{ marginTop: 14, fontSize: 12 }}>
-            The notes are complete — switch to the Notes tab. Labs are being built in the
-            order the course recommends: Ch 2, 5 and 6 first, then the limit chapters.
+            The notes are complete — switch to the Notes tab. The chapters without a lab
+            are the ones that argue rather than compute: how racing poses the problem, how
+            to run a test programme, how the subject got here.
           </div>
         </div>
       )
