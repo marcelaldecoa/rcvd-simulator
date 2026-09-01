@@ -79,6 +79,37 @@ app.whenReady().then(async () => {
   await writeFile(file, image.toPNG())
   console.log(`wrote ${file}  ${image.getSize().width}x${image.getSize().height}  ${widgets} widgets`)
 
+  // The coach, in its default state -- no key, so nothing can leave the
+  // machine. That is the state worth documenting.
+  await js(`(async () => {
+    const panel = [...document.querySelectorAll('.panel')].find(
+      p => p.querySelector('.panel-title')?.textContent === 'Debrief'
+    )
+    panel?.scrollIntoView({ block: 'center' })
+    await new Promise(r => setTimeout(r, 700))
+  })()`)
+  const coachShot = await win.webContents.capturePage()
+  const coachFile = join(OUT, 'coach.png')
+  await writeFile(coachFile, coachShot.toPNG())
+  console.log(`wrote ${coachFile}`)
+
+  // And the audible-cue settings, which live with the rest of the overlay
+  // controls in the telemetry lab.
+  await js(`(async () => {
+    const item = [...document.querySelectorAll('.nav-item')].find(e => e.textContent.includes('iRacing Telemetry'))
+    item.click()
+    await new Promise(r => setTimeout(r, 600))
+    const panel = [...document.querySelectorAll('.panel')].find(
+      p => p.querySelector('.panel-title')?.textContent === 'Audible warning'
+    )
+    panel?.scrollIntoView({ block: 'center' })
+    await new Promise(r => setTimeout(r, 700))
+  })()`)
+  const soundShot = await win.webContents.capturePage()
+  const soundFile = join(OUT, 'sound-settings.png')
+  await writeFile(soundFile, soundShot.toPNG())
+  console.log(`wrote ${soundFile}`)
+
   await js('window.rcvd.stopTelemetry()')
   clearTimeout(watchdog)
   app.exit(0)

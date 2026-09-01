@@ -21,11 +21,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Panel, Readout, Readouts } from '../components/ui'
 import { BalanceBar, Bar, Widget } from '../components/Widget'
+import { Coach } from '../components/Coach'
 import { useTelemetrySource } from '../lib/telemetry'
 import { useGarage, rearTireParams } from '../store/garage'
 import { derive } from '@core/vehicle/params.js'
 import { MagicFormulaTire } from '@core/tire/magicFormula.js'
 import { analyseSession, trackPath, type SessionSummary } from '@telemetry/dashboard.js'
+import { buildDebrief } from '@telemetry/coach.js'
 import { splitLaps, type Lap } from '@telemetry/laps.js'
 import { toDeg } from '@core/util/numeric.js'
 import type { GGOptions } from '@core/performance/gg.js'
@@ -84,6 +86,19 @@ export function DashboardLab(): React.JSX.Element {
       })
     )
   }, [samples, vehicle.a, vehicle.b, v.frontWeightFraction, modelPeaks, gg])
+
+  /** What the coach would be sent. Built here so the page can show it. */
+  const brief = useMemo(
+    () =>
+      summary && summary.usable > 0
+        ? buildDebrief(summary, {
+            garageCar: vehicle.name,
+            trackName: undefined,
+            carName: undefined
+          })
+        : null,
+    [summary, vehicle.name]
+  )
 
   const laps: Lap[] = useMemo(() => (samples.length ? splitLaps(samples) : []), [samples])
   const complete = laps.filter((l) => l.complete && l.time !== null)
@@ -405,6 +420,8 @@ export function DashboardLab(): React.JSX.Element {
           </Widget>
         </div>
       )}
+
+      <Coach brief={brief} />
     </div>
   )
 }

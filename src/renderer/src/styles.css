@@ -1638,3 +1638,60 @@ table.data tr.total td {
   gap: 14px;
   grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
 }
+
+/* ---- the coach --------------------------------------------------------- */
+
+.coach-input {
+  background: var(--bg-deep, rgba(0, 0, 0, 0.3));
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  flex: 1 1 220px;
+  font-family: inherit;
+  font-size: 12px;
+  min-width: 160px;
+  padding: 5px 8px;
+}
+
+.coach-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.coach-note {
+  color: var(--text-dim);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.coach-error {
+  color: var(--danger);
+}
+
+.coach-payload {
+  background: var(--bg-deep, rgba(0, 0, 0, 0.3));
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+  margin-top: 10px;
+  max-height: 260px;
+  overflow: auto;
+  padding: 10px;
+  white-space: pre;
+}
+
+.coach-answer {
+  border-top: 1px solid var(--border-soft);
+  margin-top: 12px;
+  padding-top: 10px;
+}
+
+.coach-para {
+  font-size: 12.5px;
+  line-height: 1.6;
+  margin: 0 0 10px;
+  white-space: pre-wrap;
+}

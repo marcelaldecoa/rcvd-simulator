@@ -32,6 +32,28 @@ export interface OverlayConfig {
   showBars: boolean
   /** Show the numeric slip angles alongside the diagram. */
   showNumbers: boolean
+
+  /**
+   * Audible cues as an axle approaches its own limit.
+   *
+   * Off by default. A sound the driver did not ask for, arriving mid-corner,
+   * is a hazard rather than an aid -- so this is opted into rather than out of.
+   */
+  soundEnabled: boolean
+  /** 0 to 1. */
+  soundVolume: number
+  soundKind: 'tone' | 'blip' | 'chirp'
+  /** Warn about the front axle (understeer). */
+  soundFront: boolean
+  /** Warn about the rear axle (oversteer). */
+  soundRear: boolean
+  /**
+   * Fraction of an axle's own peak at which a cue fires.
+   *
+   * Below 1 on purpose: this warns about the APPROACH. By the time an axle has
+   * let go the driver's inner ear has already said so and a speaker is late.
+   */
+  soundThreshold: number
 }
 
 export const OVERLAY_DEFAULTS: OverlayConfig = {
@@ -45,7 +67,13 @@ export const OVERLAY_DEFAULTS: OverlayConfig = {
   locked: true,
   showDiagram: true,
   showBars: true,
-  showNumbers: true
+  showNumbers: true,
+  soundEnabled: false,
+  soundVolume: 0.6,
+  soundKind: 'blip',
+  soundFront: true,
+  soundRear: true,
+  soundThreshold: 0.9
 }
 
 /** Bounds, in one place, so the UI sliders and the validator cannot disagree. */
@@ -53,8 +81,15 @@ export const OVERLAY_LIMITS = {
   width: { min: 180, max: 900 },
   height: { min: 140, max: 800 },
   textScale: { min: 0.6, max: 2.5 },
-  opacity: { min: 0.15, max: 1 }
+  opacity: { min: 0.15, max: 1 },
+  soundVolume: { min: 0, max: 1 },
+  // Not allowed all the way to 1: a cue that only fires once the axle is
+  // already at its peak is a report, not a warning, and arrives too late to
+  // act on. Nor so low that ordinary cornering sets it off.
+  soundThreshold: { min: 0.6, max: 0.98 }
 } as const
+
+const SOUND_KINDS = ['tone', 'blip', 'chirp'] as const
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v))
@@ -98,7 +133,23 @@ export function normaliseOverlayConfig(input: unknown): OverlayConfig {
     locked: bool(o.locked, d.locked),
     showDiagram: bool(o.showDiagram, d.showDiagram),
     showBars: bool(o.showBars, d.showBars),
-    showNumbers: bool(o.showNumbers, d.showNumbers)
+    showNumbers: bool(o.showNumbers, d.showNumbers),
+    soundEnabled: bool(o.soundEnabled, d.soundEnabled),
+    soundVolume: clamp(
+      num(o.soundVolume, d.soundVolume),
+      OVERLAY_LIMITS.soundVolume.min,
+      OVERLAY_LIMITS.soundVolume.max
+    ),
+    soundKind: (SOUND_KINDS as readonly string[]).includes(o.soundKind as string)
+      ? (o.soundKind as OverlayConfig['soundKind'])
+      : d.soundKind,
+    soundFront: bool(o.soundFront, d.soundFront),
+    soundRear: bool(o.soundRear, d.soundRear),
+    soundThreshold: clamp(
+      num(o.soundThreshold, d.soundThreshold),
+      OVERLAY_LIMITS.soundThreshold.min,
+      OVERLAY_LIMITS.soundThreshold.max
+    )
   }
 }
 
