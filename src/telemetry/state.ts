@@ -58,7 +58,31 @@ export interface VehicleState {
   steer: number
   /** Path radius implied by the yaw rate, m. Infinite when running straight. */
   radius: number
+  /**
+   * False when the car is too slow for any of this to mean anything.
+   *
+   * Not a detail: the slip-angle kinematics divide by speed, so at a standstill
+   * they amplify sensor noise without limit. Consumers must check this rather
+   * than re-deriving it from `speed`, because a zeroed angle and a genuinely
+   * zero angle are the same number and only one of them is a measurement.
+   */
+  valid: boolean
 }
+
+/**
+ * The speed below which the slip-angle construction stops meaning anything.
+ *
+ * Every angle here is built on `a*r/V` and `atan2(vy, vx)`, and both degenerate
+ * as V goes to zero -- the first by dividing by it, the second because the
+ * arctangent of two near-zero numbers is arbitrary. A parked car still reports
+ * a few microradians per second of yaw noise, and dividing that by a speed of
+ * 1e-6 turned it into hundreds of degrees of slip: the overlay showed vivid,
+ * confident, entirely fictional readings while the car sat still.
+ *
+ * 3 m/s is about 11 km/h -- below any speed at which a driver is asking a
+ * balance question, and above the noise floor.
+ */
+export const MIN_KINEMATIC_SPEED = 3
 
 /**
  * Sideslip from the sample, preferring the measured lateral velocity.
@@ -84,7 +108,7 @@ export class SideslipEstimator {
     this.drifting = false
   }
 
-  update(s: TelemetrySample, minSpeed = 3): number {
+  update(s: TelemetrySample, minSpeed = MIN_KINEMATIC_SPEED): number {
     if (s.speed < minSpeed) {
       this.beta = 0
       this.lastT = s.t
@@ -114,7 +138,26 @@ export function toVehicleState(
   geometry: VehicleGeometry,
   beta: number
 ): VehicleState {
-  const v = Math.max(s.speed, 1e-6)
+  // Below walking pace there is no honest answer, so do not manufacture one.
+  // The old floor here was 1e-6, which did not prevent the division -- it made
+  // it a million-fold amplifier on whatever noise the yaw channel held.
+  if (s.speed < MIN_KINEMATIC_SPEED) {
+    return {
+      t: s.t,
+      speed: s.speed,
+      beta: 0,
+      alphaFront: 0,
+      alphaRear: 0,
+      ay: s.ay / G,
+      ax: s.ax / G,
+      yawRate: s.yawRate,
+      steer: s.steer,
+      radius: Infinity,
+      valid: false
+    }
+  }
+
+  const v = s.speed
   const straight = Math.abs(s.yawRate) < 1e-4
   return {
     t: s.t,
@@ -126,7 +169,8 @@ export function toVehicleState(
     ax: s.ax / G,
     yawRate: s.yawRate,
     steer: s.steer,
-    radius: straight ? Infinity : v / s.yawRate
+    radius: straight ? Infinity : v / s.yawRate,
+    valid: true
   }
 }
 
@@ -149,6 +193,15 @@ export class StateFilter {
   }
 
   update(next: VehicleState): VehicleState {
+    // An invalid state is not a measurement to be blended with; it is the
+    // absence of one. Dropping the history here means that when the car does
+    // get going, the display starts from the first real reading rather than
+    // easing out of a run of zeros -- which would otherwise show a slip angle
+    // sweeping up from nothing over the filter's time constant.
+    if (!next.valid) {
+      this.last = null
+      return next
+    }
     if (!this.last) {
       this.last = next
       return next
@@ -227,6 +280,12 @@ export class LimitTracker {
   }
 
   observe(state: VehicleState): void {
+    // Never learn from a state whose angles were not measured. This matters
+    // more than it looks: below the speed floor the angles are reported as
+    // zero, so a low-speed high-Ay event -- a spin in the pit lane, a kerb --
+    // would otherwise fill the zero bin with real lateral acceleration and
+    // teach the estimator that this axle peaks at no slip angle at all.
+    if (!state.valid) return
     const ay = Math.abs(state.ay)
     if (ay < this.minAy) return
     // Only accept states that are roughly trimmed: under heavy braking or power
@@ -304,6 +363,12 @@ export interface OverlayReading {
   provisional: boolean
   /** Short text for the box. */
   text: string
+  /**
+   * False when the car is too slow to measure. The overlay must show that it
+   * is not measuring rather than a verdict, because "NEUTRAL, 0.0 degrees" is
+   * a claim about the car and this is the absence of one.
+   */
+  valid: boolean
 }
 
 export interface ReadingOptions {
@@ -338,6 +403,25 @@ export function toReading(
   const red = opts.redAbove ?? 1.0
   const band = opts.neutralBand ?? 0.35 / R2D
 
+  // Too slow to say anything. Report that, rather than a confident neutral --
+  // a green box reading NEUTRAL at a standstill is not a harmless default, it
+  // is the overlay asserting the car is balanced when it has no idea.
+  if (!state.valid) {
+    return {
+      state,
+      usageFront: 0,
+      usageRear: 0,
+      usage: 0,
+      zone: 'under',
+      balance: 'neutral',
+      balanceAngle: 0,
+      limitingAxle: 'front',
+      provisional: front.source === 'model' || rear.source === 'model',
+      text: '—',
+      valid: false
+    }
+  }
+
   const usageFront =
     front.peakSlipAngle > 0 ? Math.abs(state.alphaFront) / front.peakSlipAngle : 0
   const usageRear = rear.peakSlipAngle > 0 ? Math.abs(state.alphaRear) / rear.peakSlipAngle : 0
@@ -364,7 +448,8 @@ export function toReading(
     balanceAngle,
     limitingAxle,
     provisional,
-    text: balance === 'neutral' ? 'NEUTRAL' : balance.toUpperCase()
+    text: balance === 'neutral' ? 'NEUTRAL' : balance.toUpperCase(),
+    valid: true
   }
 }
 
