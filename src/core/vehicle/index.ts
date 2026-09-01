@@ -1,3 +1,6 @@
 export * from './params.js'
+export * from './axle.js'
+export * from './chassis.js'
+export * from './pairAnalysis.js'
 export * from './steadyState.js'
 export * from './transient.js'

@@ -3,21 +3,44 @@
  * the rest render their notes and are wired up as the labs are built.
  */
 
-export type LabId = 'tire' | 'steady' | 'transient'
+export type LabId =
+  | 'cornering'
+  | 'conditions'
+  | 'tire'
+  | 'steady'
+  | 'transient'
+  | 'pair'
+  | 'wheelLoads'
 
 export interface Chapter {
   /** Chapter number, or 0 for the course overview. */
   n: number
   title: string
   file: string
-  part: 'Overview' | 'Part I — Fundamentals' | 'Part II — Applied Subsystems'
+  part: 'Start here' | 'Part I — Fundamentals' | 'Part II — Applied Subsystems'
   lab?: LabId
   /** One-line hook shown in the empty state of chapters without a lab yet. */
   blurb?: string
 }
 
 export const CHAPTERS: Chapter[] = [
-  { n: 0, title: 'Course Overview', file: '00-course-overview.md', part: 'Overview' },
+  {
+    n: 0,
+    title: 'How a Car Corners',
+    file: '00-course-overview.md',
+    part: 'Start here',
+    lab: 'cornering',
+    blurb: 'The one idea the whole subject rests on, in one picture.'
+  },
+  {
+    n: 0,
+    title: 'Changing Conditions',
+    file: 'ch12-chassis-setup.md',
+    part: 'Start here',
+    lab: 'conditions',
+    blurb: 'What fuel, wear, temperature and surface actually do to the car.'
+  },
+  { n: 0, title: 'Course Overview', file: '00-course-overview.md', part: 'Start here' },
 
   {
     n: 1,
@@ -66,7 +89,7 @@ export const CHAPTERS: Chapter[] = [
     title: 'Steady-State Pair Analysis',
     file: 'ch07-steady-state-pair-analysis.md',
     part: 'Part I — Fundamentals',
-    blurb: 'Axle characteristics from real loads; TLLTD as the master balance parameter.'
+    lab: 'pair'
   },
   {
     n: 8,
@@ -144,7 +167,7 @@ export const CHAPTERS: Chapter[] = [
     title: 'Wheel Loads',
     file: 'ch18-wheel-loads.md',
     part: 'Part II — Applied Subsystems',
-    blurb: 'The three-mass lateral load transfer derivation, and chassis stiffness.'
+    lab: 'wheelLoads'
   },
   {
     n: 19,
@@ -184,7 +207,7 @@ export const CHAPTERS: Chapter[] = [
 ]
 
 export const PARTS = [
-  'Overview',
+  'Start here',
   'Part I — Fundamentals',
   'Part II — Applied Subsystems'
 ] as const

@@ -260,3 +260,131 @@ export function relaxationLag(
   const tau = relaxationLength / speed
   return { tau, time: -tau * Math.log(1 - fraction) }
 }
+
+// ---------------------------------------------------------------------------
+// The contact patch itself -- Ch 2 §2.3
+// ---------------------------------------------------------------------------
+
+export interface PatchSample {
+  /** Position along the patch, 0 at the leading edge, 1 at the trailing edge. */
+  xi: number
+  /** Shear force per unit xi actually developed, N. */
+  q: number
+  /** The friction limit at this station, N per unit xi. */
+  qMax: number
+  /** True where the bristles have broken away and are sliding. */
+  sliding: boolean
+}
+
+export interface ContactPatch {
+  samples: PatchSample[]
+  /** Fraction of the patch that is sliding, 0-1. Equals theta, capped at 1. */
+  slidingFraction: number
+  /** Total lateral force, N -- the integral of q. */
+  fy: number
+  /** Centroid of the shear distribution, in xi. */
+  centroid: number
+  /** Pneumatic trail, m: how far aft of the patch centre the force acts. */
+  pneumaticTrail: number
+  /** True once the whole patch is sliding -- the tire is at its peak. */
+  fullySliding: boolean
+}
+
+/**
+ * The shear stress distribution across the contact patch.
+ *
+ * This is the picture behind the whole of Ch 2. Bristles enter at the leading
+ * edge and deflect linearly with distance travelled, so shear rises linearly.
+ * The friction limit follows the parabolic pressure distribution, which is zero
+ * at both edges. Where the rising line meets the falling parabola, the bristles
+ * break away and slide.
+ *
+ * Everything the chapter asserts falls out of this one diagram:
+ *
+ *  - The sliding zone starts at the REAR and grows forward as slip rises. At
+ *    theta = 1 it has consumed the whole patch, which is exactly where lateral
+ *    force peaks -- the chapter's answer to "why is the peak where it is".
+ *  - The force centroid sits aft of centre, giving pneumatic trail, and moves
+ *    FORWARD as the sliding zone grows, which is why trail collapses and why
+ *    steering torque warns of the front limit before grip actually goes.
+ *
+ * Normalisation: q is force per unit xi, so integrating over xi in [0,1] gives
+ * the total force, and the whole-patch-sliding integral is exactly mu*Fz.
+ */
+export function contactPatch(
+  alpha: number,
+  ca: number,
+  mu: number,
+  fz: number,
+  contactLength: number,
+  n = 200
+): ContactPatch {
+  const theta = Math.min(brushTheta(alpha, ca, mu, fz), 1)
+  const adhesionEnd = 1 - theta // xi at which sliding begins
+  const peak = 6 * mu * fz
+
+  const at = (xi: number, sliding: boolean): PatchSample => ({
+    xi,
+    q: sliding ? peak * xi * (1 - xi) : peak * theta * xi,
+    qMax: peak * xi * (1 - xi),
+    sliding
+  })
+
+  // The distribution has a KINK at the adhesion/sliding boundary: a rising
+  // line meets a falling parabola. Sample each region separately so a point
+  // lands exactly on the boundary, then integrate each with Simpson's rule --
+  // which is exact for the linear adhesion branch and for the quadratic
+  // sliding branch, and exact for the first moment of both. The integrals are
+  // therefore correct to round-off rather than to grid resolution.
+  const even = (m: number): number => (m % 2 === 0 ? m : m + 1)
+  const region = (lo: number, hi: number, count: number, sliding: boolean): PatchSample[] => {
+    const out: PatchSample[] = []
+    for (let i = 0; i <= count; i++) out.push(at(lo + ((hi - lo) * i) / count, sliding))
+    return out
+  }
+
+  /** Composite Simpson over uniformly spaced values; count must be even. */
+  const simpson = (vals: number[], h: number): number => {
+    const m = vals.length - 1
+    if (m < 2) return 0
+    let acc = vals[0] + vals[m]
+    for (let i = 1; i < m; i++) acc += vals[i] * (i % 2 ? 4 : 2)
+    return (h / 3) * acc
+  }
+
+  const adhesion =
+    adhesionEnd > 1e-12
+      ? region(0, adhesionEnd, even(Math.max(2, Math.round(n * adhesionEnd))), false)
+      : []
+  const sliding =
+    theta > 1e-12 ? region(adhesionEnd, 1, even(Math.max(2, Math.round(n * theta))), true) : []
+
+  let fy = 0
+  let moment = 0
+  for (const run of [adhesion, sliding]) {
+    if (run.length < 3) continue
+    const h = run[1].xi - run[0].xi
+    fy += simpson(
+      run.map((r) => r.q),
+      h
+    )
+    moment += simpson(
+      run.map((r) => r.q * r.xi),
+      h
+    )
+  }
+
+  // Concatenate for drawing, without repeating the shared boundary point.
+  const samples = adhesion.concat(sliding.slice(adhesion.length ? 1 : 0))
+
+  const centroid = fy > 1e-9 ? moment / fy : 2 / 3
+  const sign = Math.sign(alpha) || 1
+  return {
+    samples,
+    slidingFraction: theta,
+    fy: sign * fy,
+    centroid,
+    pneumaticTrail: (centroid - 0.5) * contactLength,
+    fullySliding: theta >= 1
+  }
+}

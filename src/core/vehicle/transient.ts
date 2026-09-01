@@ -360,3 +360,66 @@ export function secondOrderPeakTime(omegaN: number, zeta: number): number {
 export function secondOrderSettlingTime(omegaN: number, zeta: number): number {
   return 3 / (zeta * omegaN)
 }
+
+// ---------------------------------------------------------------------------
+// Where the car actually goes -- the path traced by a step steer
+// ---------------------------------------------------------------------------
+
+export interface PathSample {
+  t: number
+  /** Earth-frame position, m. */
+  x: number
+  y: number
+  /** Heading -- the direction the car is POINTING, rad. */
+  heading: number
+  /** Course -- the direction the car is TRAVELLING, rad. Equals heading + beta. */
+  course: number
+  yawRate: number
+  /** Lateral acceleration, g. */
+  ay: number
+  beta: number
+}
+
+/**
+ * Integrate a step response into the path the car actually traces.
+ *
+ * The reason to draw this rather than only plot yaw rate: the gap between
+ * heading and course is what Ch 6 §4 is about. Steer input produces a yaw
+ * moment immediately, so the car starts ROTATING at once -- but it is still
+ * travelling in nearly the old direction until the rear axle builds slip angle
+ * and the path actually bends. Seeing the nose swing while the trail stays
+ * straight is the clearest possible statement of "the car takes a set".
+ *
+ * Forward speed is held constant, consistent with the 2-DOF model.
+ */
+export function trajectory(response: StepResponse, speed: number): PathSample[] {
+  const out: PathSample[] = []
+  let heading = 0
+  let x = 0
+  let y = 0
+
+  for (let i = 0; i < response.samples.length; i++) {
+    const s = response.samples[i]
+    if (i > 0) {
+      const prev = response.samples[i - 1]
+      const dt = s.t - prev.t
+      // Trapezoidal on yaw rate, then advance along the mean course.
+      const newHeading = heading + ((prev.yawRate + s.yawRate) / 2) * dt
+      const course = (heading + newHeading) / 2 + (prev.beta + s.beta) / 2
+      x += speed * Math.cos(course) * dt
+      y += speed * Math.sin(course) * dt
+      heading = newHeading
+    }
+    out.push({
+      t: s.t,
+      x,
+      y,
+      heading,
+      course: heading + s.beta,
+      yawRate: s.yawRate,
+      ay: s.ay,
+      beta: s.beta
+    })
+  }
+  return out
+}

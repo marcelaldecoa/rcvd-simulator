@@ -14,8 +14,10 @@ import {
   MagicFormulaTire,
   type MagicFormulaParams
 } from '@core/tire/magicFormula.js'
-import { scaleTire } from '@core/tire/scale.js'
+import { scaleTire, scaleTireGrip } from '@core/tire/scale.js'
 import { FORMULA_CAR, derive, type BicycleVehicle } from '@core/vehicle/params.js'
+import type { FuelTank } from '@core/conditions/index.js'
+import { FORMULA_CHASSIS, type ChassisParams } from '@core/vehicle/chassis.js'
 
 export type UnitSystem = 'SI' | 'Imperial'
 
@@ -23,14 +25,24 @@ export type UnitSystem = 'SI' | 'Imperial'
  * Axle cornering stiffnesses implied by a tire set at a car's static loads.
  * Two tires per axle, each carrying half the axle load.
  */
+/** The rear tire spec: the front tire, resized and grip-scaled. */
+export function rearTireParams(
+  tire: MagicFormulaParams,
+  rearScale: number,
+  rearGrip: number
+): MagicFormulaParams {
+  return scaleTireGrip(scaleTire(tire, rearScale), { mu: rearGrip, stiffness: rearGrip })
+}
+
 export function stiffnessFromTires(
   vehicle: BicycleVehicle,
   tire: MagicFormulaParams,
-  rearScale: number
+  rearScale: number,
+  rearGrip = 1
 ): { cf: number; cr: number } {
   const { wf, wr } = derive(vehicle)
   const front = new MagicFormulaTire(tire)
-  const rear = new MagicFormulaTire(scaleTire(tire, rearScale))
+  const rear = new MagicFormulaTire(rearTireParams(tire, rearScale, rearGrip))
   return {
     cf: 2 * front.corneringStiffness(wf / 2),
     cr: 2 * rear.corneringStiffness(wr / 2)
@@ -38,6 +50,12 @@ export function stiffnessFromTires(
 }
 
 const DEFAULT_REAR_SCALE = 1.3
+/**
+ * The app opens on a mildly understeering car rather than a neutral one.
+ * A neutral car draws two identical slip-angle wedges, which is the least
+ * informative first impression the cornering diagram could give.
+ */
+const DEFAULT_REAR_GRIP = 1.12
 
 /**
  * Start self-consistent: the linear model's Cf and Cr are the ones this tire
@@ -47,7 +65,7 @@ const DEFAULT_REAR_SCALE = 1.3
  */
 const INITIAL_VEHICLE: BicycleVehicle = {
   ...FORMULA_CAR,
-  ...stiffnessFromTires(FORMULA_CAR, DEFAULT_MF, DEFAULT_REAR_SCALE)
+  ...stiffnessFromTires(FORMULA_CAR, DEFAULT_MF, DEFAULT_REAR_SCALE, DEFAULT_REAR_GRIP)
 }
 
 interface GarageState {
@@ -56,15 +74,24 @@ interface GarageState {
   tire: MagicFormulaParams
   /** Rear tire size relative to the front. 1.0 = square, >1 = staggered. */
   rearTireScale: number
+  /** Rear grip relative to the front -- compound, temperature, wear, surface. */
+  rearGripScale: number
   /** Reference speed used by the labs that need one, m/s. */
   speed: number
+  /** Fuel tank, for the conditions lab. */
+  tank: FuelTank
+  /** Suspension and mass geometry -- Ch 18. */
+  chassis: ChassisParams
   units: UnitSystem
 
   setVehicle: (patch: Partial<BicycleVehicle>) => void
   replaceVehicle: (v: BicycleVehicle) => void
   setTire: (patch: Partial<MagicFormulaParams>) => void
   setRearTireScale: (s: number) => void
+  setRearGripScale: (s: number) => void
   setSpeed: (v: number) => void
+  setTank: (t: Partial<FuelTank>) => void
+  setChassis: (c: Partial<ChassisParams>) => void
   setUnits: (u: UnitSystem) => void
   /**
    * Overwrite the axle cornering stiffnesses with the values the current tire
@@ -80,19 +107,32 @@ export const useGarage = create<GarageState>((set, get) => ({
   vehicle: INITIAL_VEHICLE,
   tire: { ...DEFAULT_MF },
   rearTireScale: DEFAULT_REAR_SCALE,
+  rearGripScale: DEFAULT_REAR_GRIP,
   speed: 40,
+  // A formula car's tank sits behind the driver, just ahead of the engine --
+  // aft of the CG, so burning fuel moves the balance forward.
+  tank: { capacity: 60, position: 1.9 },
+  chassis: { ...FORMULA_CHASSIS },
   units: 'SI',
 
   setVehicle: (patch) => set((s) => ({ vehicle: { ...s.vehicle, ...patch } })),
   replaceVehicle: (v) => set({ vehicle: { ...v } }),
   setTire: (patch) => set((s) => ({ tire: { ...s.tire, ...patch } })),
   setRearTireScale: (rearTireScale) => set({ rearTireScale }),
+  setRearGripScale: (rearGripScale) => set({ rearGripScale }),
   setSpeed: (speed) => set({ speed }),
+  setTank: (t) => set((s) => ({ tank: { ...s.tank, ...t } })),
+  setChassis: (c) => set((s) => ({ chassis: { ...s.chassis, ...c } })),
   setUnits: (units) => set({ units }),
 
   syncStiffnessFromTire: () => {
-    const { vehicle, tire, rearTireScale } = get()
-    set({ vehicle: { ...vehicle, ...stiffnessFromTires(vehicle, tire, rearTireScale) } })
+    const { vehicle, tire, rearTireScale, rearGripScale } = get()
+    set({
+      vehicle: {
+        ...vehicle,
+        ...stiffnessFromTires(vehicle, tire, rearTireScale, rearGripScale)
+      }
+    })
   }
 }))
 
@@ -100,8 +140,9 @@ export const useGarage = create<GarageState>((set, get) => ({
 export function useTireModels(): { front: MagicFormulaTire; rear: MagicFormulaTire } {
   const tire = useGarage((s) => s.tire)
   const rearScale = useGarage((s) => s.rearTireScale)
+  const rearGrip = useGarage((s) => s.rearGripScale)
   return {
     front: new MagicFormulaTire(tire),
-    rear: new MagicFormulaTire(scaleTire(tire, rearScale))
+    rear: new MagicFormulaTire(rearTireParams(tire, rearScale, rearGrip))
   }
 }

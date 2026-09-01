@@ -10,8 +10,10 @@
  *   - and the closing caveat: with real tires, K is not a constant
  */
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Chart, type Series } from '../components/Chart'
+import { CarDiagram, describeBalance } from '../components/CarDiagram'
+import { Verdict } from '../components/Teach'
 import {
   BalancePill,
   ButtonRow,
@@ -26,6 +28,7 @@ import { MagicFormulaTire } from '@core/tire/magicFormula.js'
 import { scaleTire } from '@core/tire/scale.js'
 import { VEHICLE_PRESETS, derive } from '@core/vehicle/params.js'
 import {
+  axleLimits,
   basicBudgetLine,
   constantRadiusSweep,
   defaultBudget,
@@ -68,6 +71,13 @@ export function SteadyStateLab(): React.JSX.Element {
   )
 
   const vMax = 80
+
+  /** Lateral acceleration the picture and the trim readouts are taken at. */
+  const [trimAy, setTrimAy] = useState(0.5)
+  const limits = useMemo(
+    () => axleLimits(vehicle, tireFront, tireRear),
+    [vehicle, tireFront, tireRear]
+  )
 
   // --- Constant-radius skid pad ------------------------------------------
   const nonlinear = useMemo(
@@ -175,7 +185,14 @@ export function SteadyStateLab(): React.JSX.Element {
     return sumBudget(lines)
   }, [vehicle])
 
-  const trim = trimFromSteer(vehicle, speed, r.lateralAccelGain > 0 ? 0.5 / r.lateralAccelGain : 0)
+  const trim = trimFromSteer(
+    vehicle,
+    speed,
+    r.lateralAccelGain > 0 ? trimAy / r.lateralAccelGain : 0
+  )
+  const usageFront = limits.capacityFront > 0 ? (d.wf * trim.ay) / limits.capacityFront : 0
+  const usageRear = limits.capacityRear > 0 ? (d.wr * trim.ay) / limits.capacityRear : 0
+  const verdict = describeBalance(trim.alphaF, trim.alphaR, trim.beta, usageFront, usageRear)
 
   const vRules = [
     ...(s.characteristicSpeed && s.characteristicSpeed < vMax
@@ -580,16 +597,61 @@ export function SteadyStateLab(): React.JSX.Element {
         </div>
 
         <Panel
-          title={`Trim state at ${speed.toFixed(0)} m/s`}
+          title={`The car at ${trim.ay.toFixed(2)} g and ${speed.toFixed(0)} m/s`}
           reference="Ch 5 §4"
           note={
             <>
-              The steady turn produced at 0.5 g. Front and rear slip angles differ by
-              exactly <Formula tex="K \cdot A_y" /> — that difference, and nothing else, is
-              what separates the required steer angle from the Ackermann angle.
+              Front and rear slip angles differ by exactly{' '}
+              <Formula tex="K \cdot A_y" /> — that difference, and nothing else, is what
+              separates the required steer angle from the Ackermann angle. The picture
+              is the same construction as <strong>Start here</strong>, now driven by
+              linear theory rather than the tyre curves.
             </>
           }
         >
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+              gap: 14,
+              alignItems: 'start'
+            }}
+          >
+            <div>
+              <CarDiagram
+                a={vehicle.a}
+                b={vehicle.b}
+                steer={trim.steer}
+                alphaF={trim.alphaF}
+                alphaR={trim.alphaR}
+                beta={trim.beta}
+                radius={trim.radius}
+                fyFront={d.wf * trim.ay}
+                fyRear={d.wr * trim.ay}
+                forceScale={Math.max(limits.capacityFront, limits.capacityRear)}
+                exaggeration={Math.min(Math.max(6 / Math.max(toDeg(trim.alphaF), 0.2), 1), 30)}
+                usageFront={usageFront}
+                usageRear={usageRear}
+                height={330}
+              />
+              <Slider
+                label="Lateral acceleration"
+                unit="g"
+                value={trimAy}
+                min={0.05}
+                max={Math.max(limits.limitAy, 0.3)}
+                step={0.01}
+                onChange={setTrimAy}
+              />
+            </div>
+            <div>
+              <Verdict headline={verdict.verdict} tone={verdict.tone}>
+                {verdict.detail}
+              </Verdict>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 12 }} />
           <Readouts>
             <Readout label="Road-wheel steer" value={toDeg(trim.steer).toFixed(2)} unit="deg" tone="accent" />
             <Readout label="Handwheel" value={toDeg(trim.handwheel).toFixed(0)} unit="deg" />

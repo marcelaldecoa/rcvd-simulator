@@ -62,12 +62,36 @@ app.whenReady().then(async () => {
   record('path traversal blocked', blocked === 'BLOCKED', String(blocked))
 
   const chapters = await js("document.querySelectorAll('.nav-item').length")
-  record('renderer mounted', chapters === 24, `${chapters} chapters in the sidebar`)
+  record('renderer mounted', chapters === 26, `${chapters} nav entries in the sidebar`)
 
-  const curves = await js("document.querySelectorAll('.chart-svg path[stroke]').length")
-  record('lab charts drawn', curves > 5, `${curves} plotted curves`)
+  // The app now opens on the cornering diagram, so check that specifically:
+  // the slip-angle labels, the plain-language verdict, and the car itself.
+  const front = await js(`(() => {
+    const svg = document.querySelector('.panel svg')
+    const texts = [...(svg?.querySelectorAll('text') ?? [])].map(t => t.textContent.trim())
+    return {
+      alphaF: texts.some(t => t.startsWith('αf')),
+      alphaR: texts.some(t => t.startsWith('β') || t.startsWith('αr')),
+      wedges: (svg?.querySelectorAll('path[fill-opacity]') ?? []).length,
+      verdict: document.querySelector('.verdict-headline')?.textContent?.trim() ?? '',
+      experiments: document.querySelectorAll('.try-head').length,
+      nan: document.body.innerText.includes('NaN')
+    }
+  })()`)
+  record(
+    'cornering diagram drawn',
+    front.alphaF && front.alphaR && front.wedges >= 3 && !front.nan,
+    `${front.wedges} slip-angle wedges`
+  )
+  record(
+    'plain-language verdict shown',
+    /Understeer|Oversteer|Neutral/.test(front.verdict),
+    front.verdict
+  )
+  record('guided experiments listed', front.experiments === 5, `${front.experiments} experiments`)
 
-  // Walk the three labs, checking each renders curves and readouts.
+  // Walk the three chart dashboards. The cornering lab is deliberately
+  // diagram-heavy rather than chart-heavy and is checked above instead.
   for (const [n, name] of [
     [2, 'Tire Behavior'],
     [5, 'Steady-State'],
@@ -92,8 +116,229 @@ app.whenReady().then(async () => {
     )
   }
 
+  // Ch 2's contact patch and Ch 6's animated path are the intuition anchors
+  // for those chapters; check each is actually on screen.
+  const patch = await js(`(async () => {
+    const item = [...document.querySelectorAll('.nav-item')].find(e => e.textContent.includes('Tire Behavior'))
+    item.click()
+    await new Promise(r => setTimeout(r, 1200))
+    const svg = [...document.querySelectorAll('.panel svg')].find(s => s.textContent.includes('leading edge'))
+    return {
+      found: !!svg,
+      labels: svg ? [...svg.querySelectorAll('text')].map(t => t.textContent.trim()) : [],
+      experiments: document.querySelectorAll('.try-head').length
+    }
+  })()`)
+  record(
+    'Ch 2 contact patch drawn',
+    patch.found && patch.labels.includes('gripping') && patch.labels.includes('sliding'),
+    patch.found ? 'gripping / sliding zones labelled' : 'not found'
+  )
+  record('Ch 2 experiments listed', patch.experiments === 4, `${patch.experiments} experiments`)
+
+  const pathview = await js(`(async () => {
+    const item = [...document.querySelectorAll('.nav-item')].find(e => e.textContent.includes('Transient'))
+    item.click()
+    await new Promise(r => setTimeout(r, 1400))
+    const svg = [...document.querySelectorAll('.panel svg')].find(s => s.textContent.includes('no steer input'))
+    return {
+      found: !!svg,
+      labels: svg ? [...svg.querySelectorAll('text')].map(t => t.textContent.trim()) : [],
+      experiments: document.querySelectorAll('.try-head').length
+    }
+  })()`)
+  record(
+    'Ch 6 path animation drawn',
+    pathview.found &&
+      pathview.labels.some((t) => t.includes('pointing')) &&
+      pathview.labels.some((t) => t.includes('going')),
+    pathview.found ? 'heading and course both drawn' : 'not found'
+  )
+  record('Ch 6 experiments listed', pathview.experiments === 4, `${pathview.experiments} experiments`)
+
+  // Exercise mode: parsed from the notes, with solutions withheld.
+  const ex = await js(`(async () => {
+    const item = [...document.querySelectorAll('.nav-item')].find(e => e.textContent.includes('Tire Behavior'))
+    item.click()
+    await new Promise(r => setTimeout(r, 900))
+    const tab = [...document.querySelectorAll('.tab')].find(b => b.textContent.trim() === 'Exercises')
+    if (!tab) return { error: 'no Exercises tab' }
+    tab.click()
+    await new Promise(r => setTimeout(r, 1600))
+    const before = !!document.querySelector('.exercise-solution')
+    const reveal = [...document.querySelectorAll('.btn')].find(b => b.textContent.includes('worked solution'))
+    reveal?.click()
+    await new Promise(r => setTimeout(r, 900))
+    return {
+      chips: document.querySelectorAll('.exercise-chip').length,
+      id: document.querySelector('.exercise-id')?.textContent ?? '',
+      katex: document.querySelectorAll('.exercise-question .katex').length,
+      solutionHiddenInitially: !before,
+      solutionShown: !!document.querySelector('.exercise-solution'),
+      solutionHasAnswer: (document.querySelector('.exercise-solution')?.textContent ?? '').includes('2698')
+    }
+  })()`)
+  record('exercises parsed from the notes', ex.chips === 6 && ex.id === '2.1', `${ex.chips} exercises, showing ${ex.id}`)
+  record('exercise maths typeset', ex.katex >= 3, `${ex.katex} expressions`)
+  record(
+    'solution withheld then revealed',
+    ex.solutionHiddenInitially && ex.solutionShown && ex.solutionHasAnswer,
+    ex.solutionHasAnswer ? 'reveals the 2698 N answer' : 'answer not found'
+  )
+
+  // Conditions: presets must produce distinct, physically sensible cars, and
+  // the sensitivity ranking must reorder when the metric changes.
+  const cond = await js(`(async () => {
+    const item = [...document.querySelectorAll('.nav-item')].find(e => e.textContent.includes('Changing Conditions'))
+    item.click()
+    await new Promise(r => setTimeout(r, 1400))
+    const read = () => Object.fromEntries([...document.querySelectorAll('.readout')].map(r => [
+      r.querySelector('.readout-label')?.textContent?.trim(),
+      r.querySelector('.readout-value')?.textContent?.trim()]))
+    const press = async (t) => {
+      ;[...document.querySelectorAll('.btn')].find(b => b.textContent.trim() === t)?.click()
+      await new Promise(r => setTimeout(r, 700))
+    }
+    const out = {}
+    for (const p of ['Wet', 'Qualifying', 'Overheated rears']) {
+      await press(p)
+      out[p] = { verdict: document.querySelector('.verdict-headline')?.textContent?.trim(), ...read() }
+    }
+    await press('Optimum')
+    await press('What matters')
+    const rank = () => [...document.querySelectorAll('.tornado-row')].map(r => r.querySelector('.tornado-label').textContent.trim())
+    const balanceTop = rank()[0]
+    await press('Outright grip')
+    const gripTop = rank()[0]
+    await press('Stint')
+    const stintCurves = document.querySelectorAll('.chart-svg path[stroke]').length
+    return { out, balanceTop, gripTop, stintCurves, nan: document.body.innerText.includes('NaN') }
+  })()`)
+  record(
+    'conditions presets change the car',
+    parseFloat(cond.out['Wet']['Limit Ay']) < parseFloat(cond.out['Qualifying']['Limit Ay']) && !cond.nan,
+    `wet ${cond.out['Wet']['Limit Ay']} vs qualifying ${cond.out['Qualifying']['Limit Ay']}`
+  )
+  record(
+    'overheated rears flips the car to oversteer',
+    /Oversteer/.test(cond.out['Overheated rears'].verdict) &&
+      cond.out['Overheated rears']['Gives up first'] === 'rear',
+    cond.out['Overheated rears'].verdict
+  )
+  record(
+    'wet changes the limit but not the linear gradient',
+    cond.out['Wet']['Understeer gradient'] === cond.out['Qualifying']['Understeer gradient'],
+    `both ${cond.out['Wet']['Understeer gradient']}`
+  )
+  record(
+    'sensitivity ranking reorders with the metric',
+    cond.balanceTop !== cond.gripTop && cond.gripTop === 'Track grip',
+    `balance: ${cond.balanceTop} · grip: ${cond.gripTop}`
+  )
+  record('stint timeline drawn', cond.stintCurves >= 4, `${cond.stintCurves} curves`)
+
+  // Ch 18 wheel loads: the four-corner diagram, the three-way breakdown, and
+  // the arithmetic check the chapter itself recommends.
+  const wl = await js(`(async () => {
+    const item = [...document.querySelectorAll('.nav-item')].find(e => e.textContent.includes('Wheel Loads'))
+    item.click()
+    await new Promise(r => setTimeout(r, 1500))
+    const read = () => Object.fromEntries([...document.querySelectorAll('.readout')].map(r => [
+      r.querySelector('.readout-label')?.textContent?.trim(),
+      r.querySelector('.readout-value')?.textContent?.trim()]))
+    const svg = [...document.querySelectorAll('.panel svg')].find(s => s.textContent.includes('turning left'))
+    const legends = [...document.querySelectorAll('.breakdown-legend')].map(e => e.textContent)
+    return {
+      diagram: !!svg,
+      corners: svg ? [...svg.querySelectorAll('text')].filter(t => /^(FI|FO|RI|RO)/.test(t.textContent.trim())).length : 0,
+      breakdowns: legends.length,
+      hasThreeParts: legends.every(t => /geometric/.test(t) && /elastic/.test(t) && /unsprung/.test(t)),
+      readouts: read(),
+      nan: document.body.innerText.includes('NaN')
+    }
+  })()`)
+  record(
+    'Ch 18 four-corner diagram drawn',
+    wl.diagram && wl.corners === 4 && !wl.nan,
+    `${wl.corners} corners labelled`
+  )
+  record(
+    'Ch 18 splits transfer three ways at each axle',
+    wl.breakdowns === 2 && wl.hasThreeParts,
+    `${wl.breakdowns} axles, geometric/elastic/unsprung`
+  )
+  record(
+    'Ch 18 reports TLLTD and roll gradient',
+    /% front/.test(wl.readouts['TLLTD'] ?? '') && /deg\/g/.test(wl.readouts['Roll gradient'] ?? ''),
+    `TLLTD ${wl.readouts['TLLTD']}, roll ${wl.readouts['Roll gradient']}`
+  )
+
+  // Ch 7: bars must move balance far more than they move total grip.
+  const pa = await js(`(async () => {
+    const item = [...document.querySelectorAll('.nav-item')].find(e => e.textContent.includes('Pair Analysis'))
+    item.click()
+    await new Promise(r => setTimeout(r, 1600))
+    const read = () => Object.fromEntries([...document.querySelectorAll('.readout')].map(r => [
+      r.querySelector('.readout-label')?.textContent?.trim(),
+      r.querySelector('.readout-value')?.textContent?.trim()]))
+    const setSlider = (label, value) => {
+      const field = [...document.querySelectorAll('.field')].find(f => f.textContent.includes(label))
+      const input = field.querySelector('input[type=range]')
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set.call(input, String(value))
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+    const sample = async (f, r) => {
+      setSlider('Front anti-roll bar', f)
+      await new Promise(x => setTimeout(x, 250))
+      setSlider('Rear anti-roll bar', r)
+      await new Promise(x => setTimeout(x, 450))
+      const ro = read()
+      return {
+        tlltd: parseFloat(ro['TLLTD']),
+        limit: parseFloat(ro['Limit Ay']),
+        balance: parseFloat(ro['Limit balance'])
+      }
+    }
+    const rearBar = await sample(2000, 37000)
+    const frontBar = await sample(37000, 2000)
+    await sample(27000, 12000)
+    return {
+      rearBar,
+      frontBar,
+      curves: document.querySelectorAll('.chart-svg path[stroke]').length,
+      cost: read()['Cost of load transfer'],
+      experiments: document.querySelectorAll('.try-head').length,
+      nan: document.body.innerText.includes('NaN')
+    }
+  })()`)
+  record(
+    'Ch 7 bar moves TLLTD front to rear',
+    pa.frontBar.tlltd > pa.rearBar.tlltd + 10,
+    `${pa.rearBar.tlltd}% -> ${pa.frontBar.tlltd}% front`
+  )
+  record(
+    'Ch 7 front bar adds understeer at the limit',
+    pa.frontBar.balance > pa.rearBar.balance,
+    `balance ${pa.rearBar.balance} -> ${pa.frontBar.balance} g`
+  )
+  record(
+    'Ch 7 bars redistribute without reducing total grip',
+    Math.abs(pa.frontBar.limit - pa.rearBar.limit) / pa.rearBar.limit < 0.05,
+    `limit ${pa.rearBar.limit} vs ${pa.frontBar.limit} g`
+  )
+  record(
+    'Ch 7 quantifies what load transfer costs',
+    parseFloat(pa.cost ?? '0') > 0 && !pa.nan,
+    `${pa.cost} lost to transfer`
+  )
+  record('Ch 7 experiments listed', pa.experiments === 5, `${pa.experiments} experiments`)
+
   const katex = await js(`(async () => {
-    document.querySelectorAll('.tab')[1].click()
+    const item = [...document.querySelectorAll('.nav-item')].find(e => e.textContent.includes('Tire Behavior'))
+    item.click()
+    await new Promise(r => setTimeout(r, 900))
+    const tab = [...document.querySelectorAll('.tab')].find(b => b.textContent.trim() === 'Notes')
+    tab.click()
     await new Promise(r => setTimeout(r, 1800))
     return document.querySelectorAll('.notes .katex').length
   })()`)

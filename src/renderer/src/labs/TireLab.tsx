@@ -13,13 +13,15 @@
  * says so explicitly.
  */
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Chart, type Series } from '../components/Chart'
+import { PatchDiagram } from '../components/PatchDiagram'
+import { Explain, TryThis, type Experiment } from '../components/Teach'
 import { Formula, Panel, Readout, Readouts, Slider } from '../components/ui'
 import { useGarage } from '../store/garage'
 import { MagicFormulaTire } from '@core/tire/magicFormula.js'
 import { axleCapacity, quadraticCoefficients } from '@core/tire/loadSensitivity.js'
-import { ellipseRemainingFx } from '@core/tire/brush.js'
+import { contactPatch, ellipseRemainingFx } from '@core/tire/brush.js'
 import { linspace, toDeg, toRad } from '@core/util/numeric.js'
 
 const LOAD_COLORS = ['#5aa9ff', '#4dd6c1', '#ffcc55', '#ff9f4d', '#ff6b6b']
@@ -31,10 +33,29 @@ export function TireLab(): React.JSX.Element {
   const model = useMemo(() => new MagicFormulaTire(tire), [tire])
   const fz0 = tire.lateral.fz0
 
+  /** Slip angle the contact-patch view is drawn at, degrees. */
+  const [patchAngle, setPatchAngle] = useState(2)
+
   const loads = useMemo(
     () => [0.5, 0.75, 1.0, 1.25, 1.5].map((f) => Math.round(fz0 * f)),
     [fz0]
   )
+
+  // Brush-model patch at the reference load. Ca and mu come from the same
+  // Magic Formula the rest of the lab uses, so the two views agree.
+  const patch = useMemo(
+    () =>
+      contactPatch(
+        toRad(patchAngle),
+        model.corneringStiffness(fz0),
+        model.muY(fz0),
+        fz0,
+        tire.contactLength
+      ),
+    [patchAngle, model, fz0, tire.contactLength]
+  )
+  /** Peak of the friction envelope, so the drawing scale never jumps. */
+  const patchScale = 6 * model.muY(fz0) * fz0 * 0.25
 
   // --- 1. Lateral force curves at several loads ---------------------------
   const fyCurves: Series[] = useMemo(
@@ -188,9 +209,83 @@ export function TireLab(): React.JSX.Element {
     ]
   }, [model, fz0, fxMax, fyMax])
 
+  const experiments: Experiment[] = [
+    {
+      title: 'Delete load sensitivity and watch balance tuning stop working',
+      action: 'Set "Load sensitivity k_μ" to zero.',
+      predict: 'What happens to the axle-capacity curve, and to the "% lost" readouts?',
+      result: (
+        <>
+          The axle capacity curve goes <strong>flat</strong>: transferring load costs
+          nothing at all, and the loss readouts fall to zero. You have built a car on
+          which anti-roll bars do nothing. Ch 2 §3 says every bar adjustment on every
+          race car is an application of this one derivative — this is what the car
+          looks like without it.
+        </>
+      ),
+      run: () => setTire({ lateral: { ...tire.lateral, kMu: 0 } }),
+      reset: () => setTire({ lateral: { ...tire.lateral, kMu: 0.12 } })
+    },
+    {
+      title: 'Watch the sliding zone eat the contact patch',
+      action: 'Drag the contact patch "Slip angle" slider from 0 up past 8°.',
+      predict: 'Where does the red zone start, and what is happening when it reaches the top?',
+      result: (
+        <>
+          Sliding begins at the <strong>trailing edge</strong> and grows forward,
+          because that is where the bristles have deflected furthest while the
+          available friction has fallen away. Lateral force peaks at exactly the moment
+          the red zone reaches the leading edge — that is the answer to "why is the
+          peak where it is".
+        </>
+      ),
+      run: () => setPatchAngle(7),
+      reset: () => setPatchAngle(2)
+    },
+    {
+      title: 'Take away the driver’s front-limit warning',
+      action: 'Raise "Trail zero / Fy peak" toward 2.0.',
+      predict: 'What happens to the gap between the Mz peak and the Fy peak?',
+      result: (
+        <>
+          The two vertical markers converge: aligning torque now holds up all the way
+          to the grip peak, so the steering goes light only once the front has already
+          gone. Real cars lose this the same way — excessive caster, or power assist
+          that swamps the pneumatic component. Ch 2 §4 calls it a genuine
+          handling-quality decision, not a detail.
+        </>
+      ),
+      run: () => setTire({ trailZeroRatio: 2.0 }),
+      reset: () => setTire({ trailZeroRatio: 1.0 })
+    },
+    {
+      title: 'Make it a road tyre instead of a slick',
+      action: 'Drop μ₀ to about 1.0 and raise "Peak slip angle" to 11°.',
+      predict: 'How does the shape of the force curve change, not just its height?',
+      result: (
+        <>
+          The curve becomes lower <em>and</em> much broader — it takes far more slip
+          to reach the peak, and the peak itself is gentler. A broad flat peak is
+          forgiving: there is a wide band of slip angles where the tyre is near its
+          best, which is why road tyres feel progressive and slicks feel sharp.
+        </>
+      ),
+      run: () => {
+        setTire({ lateral: { ...tire.lateral, mu0: 1.0 }, peakSlipAngleDeg: 11 })
+      },
+      reset: () => {
+        setTire({ lateral: { ...tire.lateral, mu0: 1.55 }, peakSlipAngleDeg: 6 })
+      }
+    }
+  ]
+
   return (
     <div className="lab">
       <div className="stack">
+        <Panel title="Try these" reference="guided">
+          <TryThis experiments={experiments} />
+        </Panel>
+
         <Panel title="Tire parameters" reference="Ch 2">
           <Slider
             label="Peak friction μ₀ at reference load"
@@ -295,6 +390,91 @@ export function TireLab(): React.JSX.Element {
       </div>
 
       <div className="stack">
+        <Panel
+          title="Inside the contact patch"
+          reference="Ch 2 §2.3"
+          note={
+            <>
+              The bristles enter at the leading edge and deflect further the longer
+              they stay in contact, so the shear they carry rises as a{' '}
+              <strong>straight line</strong>. The friction available follows the
+              parabolic pressure distribution, which is zero at both edges. Where
+              the line meets the parabola, the rubber lets go.
+            </>
+          }
+        >
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(272px, 1fr))',
+              gap: 16
+            }}
+          >
+            <PatchDiagram patch={patch} scale={patchScale} height={330} />
+            <div>
+              <Slider
+                label="Slip angle"
+                unit="deg"
+                value={patchAngle}
+                min={0}
+                max={14}
+                step={0.05}
+                digits={2}
+                onChange={setPatchAngle}
+              />
+              <div style={{ marginTop: 10 }}>
+                <Readouts>
+                  <Readout
+                    label="Patch sliding"
+                    value={(patch.slidingFraction * 100).toFixed(0)}
+                    unit="%"
+                    tone={patch.fullySliding ? 'danger' : patch.slidingFraction > 0.5 ? 'warn' : 'ok'}
+                  />
+                  <Readout label="Lateral force" value={(patch.fy / 1000).toFixed(2)} unit="kN" tone="front" />
+                  <Readout
+                    label="Pneumatic trail"
+                    value={(patch.pneumaticTrail * 1000).toFixed(1)}
+                    unit="mm"
+                    tone="accent"
+                  />
+                  <Readout
+                    label="Aligning torque"
+                    value={(patch.pneumaticTrail * patch.fy).toFixed(0)}
+                    unit="N·m"
+                  />
+                </Readouts>
+              </div>
+              <div style={{ marginTop: 12 }}>
+                <Explain
+                  seeing={
+                    <>
+                      One tyre's contact patch from above, travelling up the page.
+                      Green rubber is gripping; red rubber has broken away and is
+                      sliding. The blue curve is the shear each strip of rubber is
+                      actually carrying.
+                    </>
+                  }
+                  look={
+                    <>
+                      Raise the slip angle and watch the red zone eat the patch{' '}
+                      <strong>from the rear forward</strong>. Force peaks exactly when
+                      it reaches the front. Meanwhile the teal line — where the
+                      resultant acts — creeps toward the centre, and the trail with it.
+                    </>
+                  }
+                  matters={
+                    <>
+                      This one picture is why the force curve has its shape, why there
+                      is pneumatic trail at all, and why steering torque falls away
+                      before grip does.
+                    </>
+                  }
+                />
+              </div>
+            </div>
+          </div>
+        </Panel>
+
         <div className="grid2">
           <Panel
             title="Lateral force vs slip angle"

@@ -1,3 +1,5 @@
 export * from './util/numeric.js'
+export * from './util/exercises.js'
 export * from './tire/index.js'
 export * from './vehicle/index.js'
+export * from './conditions/index.js'
