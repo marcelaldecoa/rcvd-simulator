@@ -16,6 +16,11 @@ export type LabId =
   | 'aero'
   | 'gg'
   | 'mmm'
+  | 'rates'
+  | 'geometry'
+  | 'steering'
+  | 'driveline'
+  | 'compliance'
 
 export interface Chapter {
   /** Chapter number, or 0 for the course overview. */
@@ -174,14 +179,14 @@ export const CHAPTERS: Chapter[] = [
     title: 'Ride and Roll Rates',
     file: 'ch16-ride-and-roll-rates.md',
     part: 'Part II — Applied Subsystems',
-    blurb: 'Installation ratio, Kw = Ks·IR², ride frequencies, elastic TLLTD.'
+    lab: 'rates'
   },
   {
     n: 17,
     title: 'Suspension Geometry',
     file: 'ch17-suspension-geometry.md',
     part: 'Part II — Applied Subsystems',
-    blurb: 'Instant centres, roll centres, camber curves, anti-dive and anti-squat.'
+    lab: 'geometry'
   },
   {
     n: 18,
@@ -195,14 +200,14 @@ export const CHAPTERS: Chapter[] = [
     title: 'Steering Systems',
     file: 'ch19-steering-systems.md',
     part: 'Part II — Applied Subsystems',
-    blurb: 'Caster, KPI, trail, Ackermann, bump and roll steer, steering torque.'
+    lab: 'steering'
   },
   {
     n: 20,
     title: 'Driving and Braking',
     file: 'ch20-driving-and-braking.md',
     part: 'Part II — Applied Subsystems',
-    blurb: 'Traction limits by layout, differentials, brake bias.'
+    lab: 'driveline'
   },
   {
     n: 21,
@@ -223,7 +228,7 @@ export const CHAPTERS: Chapter[] = [
     title: 'Compliances',
     file: 'ch23-compliances.md',
     part: 'Part II — Applied Subsystems',
-    blurb: 'Compliance steer and camber, and why the softest element dominates.'
+    lab: 'compliance'
   }
 ]
 

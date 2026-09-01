@@ -562,6 +562,208 @@ app.whenReady().then(async () => {
   )
   record('Ch 8 experiments listed', mmm.experiments === 5, `${mmm.experiments} experiments`)
 
+  // Part II, chapters 16, 17, 19, 20 and 23. The load-bearing check is the first
+  // one: Ch 16 must actually FEED the rest of the app rather than computing roll
+  // stiffness in a corner by itself.
+  const part2 = await js(`(async () => {
+    const waitFor = async (test, ms = 20000) => {
+      const deadline = Date.now() + ms
+      while (Date.now() < deadline) {
+        try { if (test()) return true } catch { /* not ready */ }
+        await new Promise(r => setTimeout(r, 120))
+      }
+      return false
+    }
+    const read = () => Object.fromEntries([...document.querySelectorAll('.readout')].map(r => [
+      r.querySelector('.readout-label')?.textContent?.trim(),
+      r.querySelector('.readout-value')?.textContent?.trim()]))
+    const rows = () => [...document.querySelectorAll('table.data tr')].map(r =>
+      [...r.children].map(c => c.textContent.trim()))
+    const go = async (name, until) => {
+      const item = [...document.querySelectorAll('.nav-item')].find(e => e.textContent.includes(name))
+      if (!item) throw new Error('nav item missing: ' + name)
+      item.click()
+      await waitFor(until)
+      await new Promise(r => setTimeout(r, 350))
+    }
+    const setSlider = (label, value) => {
+      const f = [...document.querySelectorAll('.field')].find(x => x.textContent.includes(label))
+      if (!f) throw new Error('slider not found: ' + label)
+      const input = f.querySelector('input[type=range]')
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set.call(input, String(value))
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+    const clickBtn = (text) => {
+      const b = [...document.querySelectorAll('.btn')].find(x => x.textContent.includes(text))
+      if (!b) throw new Error('button not found: ' + text)
+      b.click()
+    }
+
+    // --- Ch 7 before, Ch 16 pushes rates across, Ch 7 after ---------------
+    await go('Pair Analysis', () => read()['TLLTD'])
+    const pairBefore = read()
+
+    await go('Ride and Roll Rates', () => rows().length > 2)
+    const ratesRows = rows()
+    const ratesReadouts = read()
+    let pushed = false
+    try { clickBtn('Send these rates to the car'); pushed = true } catch { /* already in sync */ }
+    await new Promise(r => setTimeout(r, 600))
+    const syncLabel = [...document.querySelectorAll('.btn')]
+      .map(b => b.textContent.trim())
+      .find(t => /up to date|Send these rates/.test(t))
+
+    await go('Pair Analysis', () => read()['TLLTD'])
+    const pairAfter = read()
+
+    // --- Ch 17 ------------------------------------------------------------
+    await go('Suspension Geometry', () => read()['Swing arm (FVSA)'])
+    const geoRace = read()
+    clickBtn('Exercise 17.1')
+    await new Promise(r => setTimeout(r, 600))
+    const geoEx = read()
+    clickBtn('Race geometry')
+    await new Promise(r => setTimeout(r, 400))
+
+    // --- Ch 19 ------------------------------------------------------------
+    await go('Steering Systems', () => read()['Signal clarity'])
+    setSlider('Caster', 2)
+    await new Promise(r => setTimeout(r, 500))
+    const steerLow = read()
+    setSlider('Caster', 12)
+    await new Promise(r => setTimeout(r, 500))
+    const steerHigh = read()
+    setSlider('Caster', 6)
+    await new Promise(r => setTimeout(r, 400))
+
+    // --- Ch 20 ------------------------------------------------------------
+    await go('Driving and Braking', () => read()['Torque bias ratio'])
+    const drive = read()
+    const driveRows = rows()
+
+    // --- Ch 23 ------------------------------------------------------------
+    await go('Compliances', () => read()['Bar, effective'])
+    const compl = read()
+
+    return {
+      ratesRows, ratesReadouts, pushed, syncLabel,
+      pairBefore, pairAfter,
+      geoRace, geoEx,
+      steerLow, steerHigh,
+      drive, driveRows,
+      compl,
+      nan: document.body.innerText.includes('NaN')
+    }
+  })()`)
+
+  const val = (v) => parseFloat(String(v ?? 'NaN'))
+  const p2 = part2
+
+  // Ch 16 -- Exercise 16.1, rendered.
+  const frontRow = p2.ratesRows.find((r) => r[0] === 'Front') ?? []
+  record(
+    'Ch 16 reproduces Exercise 16.1 in the corner table',
+    Math.abs(val(frontRow[2]) - 46.13) < 0.05 &&
+      Math.abs(val(frontRow[3]) - 40.32) < 0.05 &&
+      Math.abs(val(frontRow[5]) - 2.57) < 0.02,
+    `wheel ${frontRow[2]}, ride ${frontRow[3]}, ${frontRow[5]}`
+  )
+  record(
+    'Ch 16 shows the 7% error from treating the tyre as rigid',
+    val(frontRow[6]) > val(frontRow[5]) &&
+      Math.abs(val(frontRow[6]) / val(frontRow[5]) - 1.07) < 0.01,
+    `${frontRow[5]} with the tyre vs ${frontRow[6]} without`
+  )
+  record(
+    'Ch 16 squares the installation ratio',
+    Math.abs(
+      val(p2.ratesReadouts['If IR were 10% higher']) / val(p2.ratesReadouts['Wheel rate now']) - 1.21
+    ) < 0.005,
+    `${p2.ratesReadouts['Wheel rate now']} -> ${p2.ratesReadouts['If IR were 10% higher']}`
+  )
+  record(
+    'Ch 16 rates actually reach Chapter 7',
+    p2.syncLabel === 'Car is up to date' &&
+      (!p2.pushed || p2.pairBefore['TLLTD'] !== p2.pairAfter['TLLTD']),
+    p2.pushed
+      ? `TLLTD ${p2.pairBefore['TLLTD']} -> ${p2.pairAfter['TLLTD']}`
+      : 'already in sync'
+  )
+
+  // Ch 17 -- the corrected Exercise 17.1.
+  record(
+    'Ch 17 puts a sane geometry inboard with a low roll centre',
+    val(p2.geoRace['Swing arm (FVSA)']) > 2 &&
+      val(p2.geoRace['Roll centre']) > 0 &&
+      val(p2.geoRace['Roll centre']) < 120,
+    `FVSA ${p2.geoRace['Swing arm (FVSA)']}, RC ${p2.geoRace['Roll centre']}`
+  )
+  record(
+    'Ch 17 Exercise 17.1 geometry puts the roll centre BELOW ground',
+    val(p2.geoEx['Roll centre']) < 0 && Math.abs(val(p2.geoEx['Roll centre']) + 165) < 3,
+    `${p2.geoEx['Roll centre']} — the notes report +438 mm from a frame mix-up`
+  )
+  record(
+    'Ch 17 reports the swing arm as outboard for that geometry',
+    /outboard/.test(String(p2.geoEx['Swing arm (FVSA)'])) &&
+      Math.abs(val(p2.geoEx['Camber gain']) - 0.0461) < 0.0005,
+    `${p2.geoEx['Swing arm (FVSA)']}, gain ${p2.geoEx['Camber gain']}`
+  )
+
+  // Ch 19 -- the caster trade.
+  record(
+    'Ch 19 buries the front-limit cue as caster grows',
+    val(p2.steerHigh['Mechanical trail']) > val(p2.steerLow['Mechanical trail']) * 2 &&
+      val(p2.steerHigh['Signal clarity']) < val(p2.steerLow['Signal clarity']),
+    `2 deg: ${p2.steerLow['Signal clarity']} clarity, 12 deg: ${p2.steerHigh['Signal clarity']}`
+  )
+  record(
+    'Ch 19 quantifies the understeer compliance invents',
+    val(p2.steerLow['Apparent understeer']) > 0 && val(p2.steerLow['Budget coefficient']) > 0,
+    `${p2.steerLow['Apparent understeer']} deg/g apparent`
+  )
+
+  // Ch 20 -- one sign, and the differential as a steering input.
+  const rwd = p2.driveRows.find((r) => r[0] === 'Rear drive') ?? []
+  const fwd = p2.driveRows.find((r) => r[0] === 'Front drive') ?? []
+  // The mechanism, not the weight distribution. Ch 20 Ex 20.1's car happens to
+  // be front-biased, which is what lets the exercise say "more static weight on
+  // the driven axle and still slower" -- but the garage's formula car is
+  // rear-biased, so that particular phrasing does not apply to it. What holds
+  // for ANY car is the sign of the load transfer term: rear drive recruits load
+  // as it accelerates, front drive sheds it, and rear drive wins.
+  record(
+    'Ch 20 has rear drive recruit load and front drive shed it',
+    val(rwd[1]) > val(fwd[1]) && val(rwd[4]) > 0 && val(fwd[4]) < 0,
+    `RWD ${rwd[1]} at ${rwd[4]}, FWD ${fwd[1]} at ${fwd[4]}`
+  )
+  record(
+    'Ch 20 ranks open < LSD < spool',
+    val(p2.drive['Open']) < val(p2.drive['This LSD']) &&
+      val(p2.drive['This LSD']) < val(p2.drive['Spool']),
+    `${p2.drive['Open']} / ${p2.drive['This LSD']} / ${p2.drive['Spool']}`
+  )
+  record(
+    'Ch 20 prices the differential in degrees of steering',
+    val(p2.drive['…as opposite lock']) > 0.05,
+    `${p2.drive['Anti-turn yaw moment']} = ${p2.drive['…as opposite lock']} deg of opposite lock`
+  )
+
+  // Ch 23 -- the series relation, twice.
+  record(
+    'Ch 23 loses part of every bar to its mounts',
+    val(p2.compl['Bar, effective']) < val(p2.compl['Bar, nominal']) &&
+      val(p2.compl['A 50% bigger bar delivers']) < 100,
+    `${p2.compl['Bar, nominal']} nominal -> ${p2.compl['Bar, effective']} effective, upgrade delivers ${p2.compl['A 50% bigger bar delivers']}`
+  )
+  record(
+    'Ch 23 dilutes a setup change through chassis twist',
+    val(p2.compl['Setup change realized']) > 0 &&
+      val(p2.compl['Setup change realized']) < 100 &&
+      !p2.nan,
+    `${p2.compl['Setup change realized']} of an intended TLLTD change survives`
+  )
+
   // Aerodynamics and the g-g envelope. The claim worth checking is that
   // downforce actually reaches the vehicle model rather than sitting in its own
   // corner of the app.
