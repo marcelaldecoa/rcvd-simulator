@@ -11,6 +11,8 @@ export type LabId =
   | 'transient'
   | 'pair'
   | 'wheelLoads'
+  | 'glossary'
+  | 'formulas'
 
 export interface Chapter {
   /** Chapter number, or 0 for the course overview. */
@@ -39,6 +41,22 @@ export const CHAPTERS: Chapter[] = [
     part: 'Start here',
     lab: 'conditions',
     blurb: 'What fuel, wear, temperature and surface actually do to the car.'
+  },
+  {
+    n: 0,
+    title: 'The Formulas',
+    file: '00-course-overview.md',
+    part: 'Start here',
+    lab: 'formulas',
+    blurb: 'Every key equation, with your numbers in it and a chart of the relationship.'
+  },
+  {
+    n: 0,
+    title: 'Glossary · Glossário',
+    file: 'glossary.md',
+    part: 'Start here',
+    lab: 'glossary',
+    blurb: 'Every term in English and Brazilian Portuguese, searchable.'
   },
   { n: 0, title: 'Course Overview', file: '00-course-overview.md', part: 'Start here' },
 

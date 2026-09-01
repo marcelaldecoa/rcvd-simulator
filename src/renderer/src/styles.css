@@ -1243,3 +1243,289 @@ table.data tr.total td {
   font-size: 10px;
   margin-top: 4px;
 }
+
+/* -------------------------------------------------------------- glossary */
+
+.glossary {
+  margin: 0 auto;
+  max-width: 1120px;
+  padding: 16px 24px 80px;
+}
+
+.glossary-bar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.glossary-search {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  flex: 1;
+  font-family: var(--sans);
+  font-size: 13px;
+  min-width: 260px;
+  padding: 8px 11px;
+}
+
+.glossary-search:focus {
+  border-color: var(--accent-dim);
+  outline: none;
+}
+
+.glossary-search::placeholder {
+  color: var(--text-faint);
+}
+
+.glossary-count {
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.glossary-note {
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.6;
+  margin-bottom: 14px;
+}
+
+.glossary-flag {
+  background: rgba(255, 204, 85, 0.14);
+  border-radius: 3px;
+  color: var(--warn);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  margin-left: 6px;
+  padding: 1px 4px;
+  vertical-align: middle;
+}
+
+.glossary-table td {
+  text-align: left;
+  vertical-align: top;
+}
+
+.glossary-table th {
+  text-align: left;
+}
+
+.glossary-term {
+  color: var(--text) !important;
+  font-family: var(--sans) !important;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.glossary-term-2 {
+  color: var(--accent) !important;
+  font-family: var(--sans) !important;
+}
+
+.glossary-symbol {
+  color: var(--text-dim) !important;
+  white-space: nowrap;
+}
+
+.glossary-symbol .katex {
+  font-size: 1em;
+}
+
+.glossary-meaning {
+  color: var(--text-dim) !important;
+  font-family: var(--sans) !important;
+  font-size: 11.5px !important;
+  line-height: 1.55;
+}
+
+.glossary-section {
+  color: var(--text-faint);
+  display: block;
+  font-size: 9.5px;
+  letter-spacing: 0.3px;
+  margin-top: 3px;
+  text-transform: uppercase;
+}
+
+/* --------------------------------------------------------- formula lab */
+
+.formula-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-bottom: 16px;
+}
+
+.formula-pick-group {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.formula-pick-label {
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  min-width: 34px;
+}
+
+.formula-meaning {
+  color: var(--text-dim);
+  font-size: 12.5px;
+  line-height: 1.6;
+  margin-bottom: 14px;
+}
+
+.formula-stage {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 16px;
+}
+
+.formula-row {
+  margin-bottom: 10px;
+}
+
+.formula-tag {
+  color: var(--text-faint);
+  display: inline-block;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  margin-bottom: 2px;
+  text-transform: uppercase;
+}
+
+.formula-tag-sub {
+  color: var(--accent);
+}
+
+.formula-big {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 0;
+}
+
+.formula-big .katex {
+  font-size: 1.22em;
+}
+
+.formula-result {
+  align-items: baseline;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+  padding-top: 12px;
+}
+
+.formula-result-value {
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.formula-result-unit {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.formula-terms {
+  margin-top: 16px;
+}
+
+.term-row {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr 130px 76px;
+  margin-bottom: 6px;
+}
+
+.term-label {
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+
+.term-track {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  height: 14px;
+  overflow: hidden;
+}
+
+.term-bar {
+  height: 100%;
+  opacity: 0.85;
+}
+
+.term-value {
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  text-align: right;
+}
+
+.formula-hint {
+  color: var(--text-faint);
+  font-size: 11px;
+  margin-bottom: 10px;
+}
+
+.formula-var {
+  align-items: center;
+  border-left: 2px solid transparent;
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding-left: 6px;
+}
+
+.formula-var-active {
+  border-left-color: var(--accent);
+}
+
+.formula-symbol {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  cursor: pointer;
+  min-width: 42px;
+  padding: 5px 8px;
+}
+
+.formula-symbol:hover {
+  border-color: var(--accent-dim);
+}
+
+.formula-var-active .formula-symbol {
+  background: rgba(77, 214, 193, 0.12);
+  border-color: var(--accent);
+}
+
+.formula-symbol .katex {
+  font-size: 1.05em;
+}
+
+.formula-symbol-sm {
+  min-width: 0;
+  padding: 2px 6px;
+}
+
+.tornado-label {
+  align-items: center;
+  display: flex;
+}
