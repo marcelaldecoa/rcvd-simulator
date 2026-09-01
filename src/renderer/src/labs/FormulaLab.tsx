@@ -131,7 +131,7 @@ export function FormulaLab(): React.JSX.Element {
             {terms && (
               <div className="formula-terms">
                 <div className="formula-tag" style={{ marginBottom: 8 }}>
-                  Where it comes from
+                  {active.termsLabel ?? 'Where it comes from'}
                 </div>
                 {terms.map((t) => (
                   <div className="term-row" key={t.label}>

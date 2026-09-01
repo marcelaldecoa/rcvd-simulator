@@ -279,6 +279,8 @@ export interface WheelLoads {
   transfer: LateralTransfer
   /** Longitudinal transfer applied, N. */
   longitudinal: number
+  /** Aerodynamic download applied to each axle, N. */
+  aero: { front: number; rear: number }
 }
 
 /**
@@ -292,14 +294,18 @@ export function wheelLoads(
   v: BicycleVehicle,
   c: ChassisParams,
   ay: number,
-  ax = 0
+  ax = 0,
+  aero: { front: number; rear: number } = { front: 0, rear: 0 }
 ): WheelLoads {
   const { wf, wr } = derive(v)
   const t = lateralTransfer(v, c, ay)
   const dLong = longitudinalTransfer(v, c, ax)
 
-  const axleFront = Math.max(wf - dLong, 0)
-  const axleRear = Math.max(wr + dLong, 0)
+  // Aerodynamic download adds to each axle before the lateral split. It is
+  // taken as symmetric left-to-right: Ch 15 §9 notes that roll and yaw do move
+  // aero balance, but representing that needs an aero map the notes do not give.
+  const axleFront = Math.max(wf - dLong + aero.front, 0)
+  const axleRear = Math.max(wr + dLong + aero.rear, 0)
 
   const fo = Math.max(axleFront / 2 + t.front, 0)
   const fi = Math.max(axleFront / 2 - t.front, 0)
@@ -315,7 +321,8 @@ export function wheelLoads(
     rear: ro + ri,
     anyLifted: fi <= 0 || ri <= 0,
     transfer: t,
-    longitudinal: dLong
+    longitudinal: dLong,
+    aero
   }
 }
 

@@ -24,12 +24,34 @@ export interface LoadSensitivity {
    * k_mu = 0.1 means mu falls 10% when load doubles.
    */
   kMu: number
+  /**
+   * Floor on mu, as a fraction of mu0. Defaults to MU_FLOOR_FRACTION.
+   *
+   * The linear form above is what Ch 2 §3 gives, described there as "a common
+   * linearization" -- and like any linearization it is valid over a limited
+   * range. Extrapolated far enough it passes through zero and goes negative,
+   * which is not merely inaccurate but qualitatively wrong: it says a heavily
+   * loaded tyre has NO grip. That matters as soon as aerodynamics enters,
+   * because a high-downforce car at speed reaches loads several times the
+   * reference. The floor keeps the model physical out there; it does not touch
+   * the range the chapter's own exercises use.
+   */
+  muFloorFraction?: number
 }
 
-/** mu_y(Fz), clamped to stay positive. Ch 2 §3. */
+/** Default floor on mu, as a fraction of its reference value. */
+export const MU_FLOOR_FRACTION = 0.35
+
+/** mu_y(Fz), floored so the linearization stays physical. Ch 2 §3. */
 export function muAtLoad(ls: LoadSensitivity, fz: number): number {
-  const mu = ls.mu0 * (1 - ls.kMu * (fz - ls.fz0) / ls.fz0)
-  return Math.max(mu, 1e-6)
+  const mu = ls.mu0 * (1 - (ls.kMu * (fz - ls.fz0)) / ls.fz0)
+  return Math.max(mu, ls.mu0 * (ls.muFloorFraction ?? MU_FLOOR_FRACTION))
+}
+
+/** The load beyond which the linear model has been floored and is extrapolating. */
+export function loadSensitivityValidTo(ls: LoadSensitivity): number {
+  const floor = ls.muFloorFraction ?? MU_FLOOR_FRACTION
+  return ls.fz0 * (1 + (1 - floor) / ls.kMu)
 }
 
 /** Peak lateral force at a given load, N. */

@@ -94,8 +94,8 @@ describe('catalogue integrity', () => {
     }
   })
 
-  it('makes term breakdowns add up to the result', () => {
-    for (const f of FORMULAS.filter((x) => x.terms)) {
+  it('makes result breakdowns add up to the result', () => {
+    for (const f of FORMULAS.filter((x) => x.terms && x.termsDescribe !== 'denominator')) {
       const values = defaultValues(f)
       const sum = f.terms!(values).reduce(
         (acc, t, i) => (i === 0 ? t.value : acc - t.value),
@@ -112,6 +112,31 @@ describe('catalogue integrity', () => {
 // ---------------------------------------------------------------------------
 // The important part: agreement with the models.
 // ---------------------------------------------------------------------------
+
+describe('term breakdowns that describe something other than the result', () => {
+  it('label what they decompose, and are consistent with it', () => {
+    const f = formulaById('aero-cornering-speed')!
+    expect(f.termsDescribe).toBe('denominator')
+    expect(f.termsLabel).toBeTruthy()
+    const values = defaultValues(f)
+    const [demand, relief] = f.terms!(values)
+    // The denominator really is the difference of these two, and the formula
+    // really is sqrt(mu*m*g / that).
+    const denom = demand.value - relief.value
+    expect(f.evaluate(values)).toBeCloseTo(
+      Math.sqrt((values.mu * values.m * 9.80665) / denom),
+      6
+    )
+  })
+
+  it('runs away as the denominator closes on zero', () => {
+    const f = formulaById('aero-cornering-speed')!
+    const values = defaultValues(f)
+    const mild = f.evaluate({ ...values, cla: 1 })
+    const strong = f.evaluate({ ...values, cla: 3.5 })
+    expect(strong).toBeGreaterThan(mild * 2)
+  })
+})
 
 describe('agreement with the tyre models', () => {
   it('axle loss matches quadraticLoss', () => {

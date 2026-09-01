@@ -59,6 +59,16 @@ export interface Formula {
    * difference. This is where "why is it this value" usually lives.
    */
   terms?: (v: Record<string, number>) => FormulaTerm[]
+  /**
+   * What those terms decompose. Usually the result itself, but not always:
+   * Exercise 3.5's cornering speed is most usefully broken into the two halves
+   * of its DENOMINATOR, because the interesting behaviour is that difference
+   * closing on zero. Stated explicitly so the integrity test knows which
+   * breakdowns must sum to the answer and which must not.
+   */
+  termsDescribe?: 'result' | 'denominator'
+  /** Heading for the breakdown panel. */
+  termsLabel?: string
   /** What to notice when sweeping. */
   insight: string
   /** Variables whose sweep is most instructive; the first is the default. */
@@ -383,6 +393,83 @@ export const FORMULAS: Formula[] = [
     sweep: ['speed', 'cr', 'a']
   },
 
+  // ------------------------------------------------------------- Chapter 3
+  {
+    id: 'dynamic-pressure',
+    title: 'Dynamic pressure',
+    reference: 'Ch 3 §3',
+    chapter: 3,
+    tex: 'q = \tfrac{1}{2}\rho V^2',
+    meaning: 'The pressure the airflow can convert into force — everything aerodynamic scales with it.',
+    vars: [
+      v('rho', '\rho', 'Air density', 'kg/m³', 0.8, 1.35, 0.005, 1.225, 3),
+      v('speed', 'V', 'Speed', 'm/s', 0, 100, 0.5, 55.6, 1)
+    ],
+    evaluate: ({ rho, speed }) => 0.5 * rho * speed * speed,
+    substituted: ({ rho, speed }) => `\tfrac{1}{2} \times ${n(rho, 3)} \times ${n(speed, 1)}^2`,
+    unit: 'Pa',
+    resultTex: 'q',
+    digits: 0,
+    insight:
+      'At 200 km/h this is about 1900 Pa — under 2% of atmospheric pressure. Aerodynamic forces are small pressure differences acting over large areas, which is why a few percent error in a pressure measurement is a large error in a force.',
+    sweep: ['speed', 'rho']
+  },
+  {
+    id: 'downforce',
+    title: 'Downforce',
+    reference: 'Ch 3 §6',
+    chapter: 3,
+    tex: 'L = \tfrac{1}{2}\rho V^2 C_L A',
+    meaning: 'Vertical load added by the bodywork — load without mass, which is the whole trick.',
+    vars: [
+      v('rho', '\rho', 'Air density', 'kg/m³', 0.8, 1.35, 0.005, 1.225, 3),
+      v('speed', 'V', 'Speed', 'm/s', 0, 100, 0.5, 60, 1),
+      v('cla', 'C_L A', 'Downforce coefficient × area', 'm²', 0, 7, 0.05, 3.0)
+    ],
+    evaluate: ({ rho, speed, cla }) => 0.5 * rho * speed * speed * cla,
+    substituted: ({ rho, speed, cla }) =>
+      `\tfrac{1}{2} \times ${n(rho, 3)} \times ${n(speed, 1)}^2 \times ${n(cla, 2)}`,
+    unit: 'N',
+    resultTex: 'L',
+    digits: 0,
+    insight:
+      'It grows with the SQUARE of speed while the car weight does not grow at all. That single asymmetry is why a wing works, why grip becomes speed-dependent, and why aero balance produces a handling balance that drifts along a straight.',
+    sweep: ['speed', 'cla', 'rho']
+  },
+  {
+    id: 'aero-cornering-speed',
+    title: 'Cornering speed with downforce',
+    reference: 'Ch 3, Exercise 3.5',
+    chapter: 3,
+    tex: 'V = \sqrt{\dfrac{\mu m g}{\dfrac{m}{R} - \dfrac{\mu\rho C_L A}{2}}}',
+    meaning: 'The speed a corner can be taken at once downforce is in the balance.',
+    vars: [
+      v('mu', '\mu', 'Friction coefficient', '', 0.8, 2.2, 0.01, 1.5),
+      v('m', 'm', 'Mass', 'kg', 400, 1600, 5, 750, 0),
+      v('R', 'R', 'Corner radius', 'm', 30, 400, 1, 200, 0),
+      v('rho', '\rho', 'Air density', 'kg/m³', 0.8, 1.35, 0.005, 1.225, 3),
+      v('cla', 'C_L A', 'Downforce coefficient × area', 'm²', 0, 4.0, 0.05, 3.0)
+    ],
+    evaluate: ({ mu, m, R, rho, cla }) => {
+      const denom = m / R - (mu * rho * cla) / 2
+      return denom <= 0 ? 999 : Math.sqrt((mu * m * G) / denom)
+    },
+    substituted: ({ mu, m, R, rho, cla }) =>
+      `\sqrt{\dfrac{${n(mu, 2)} \times ${n(m, 0)} \times ${n(G, 2)}}{${n(m / R, 3)} - ${n((mu * rho * cla) / 2, 3)}}}`,
+    unit: 'm/s',
+    resultTex: 'V',
+    digits: 1,
+    terms: ({ m, R, mu, rho, cla }) => [
+      { label: 'Demand  m/R', value: m / R, tone: 'warn' },
+      { label: 'Downforce relief  μρCₗA/2', value: (mu * rho * cla) / 2, tone: 'accent' }
+    ],
+    termsDescribe: 'denominator',
+    termsLabel: 'The denominator — watch it close on zero',
+    insight:
+      'Watch the denominator, not the answer. It is a DIFFERENCE, and as downforce grows it approaches zero and the speed runs away. Ch 3 calls that near-singularity the mathematical signature of the ground-effect era. It is also an artefact of assuming one fixed μ — with load-sensitive tyres the simulator never diverges.',
+    sweep: ['cla', 'R', 'mu']
+  },
+
   // ------------------------------------------------------------ Chapter 18
   {
     id: 'lateral-load-transfer',
@@ -441,7 +528,7 @@ export function defaultValues(f: Formula): Record<string, number> {
   return Object.fromEntries(f.vars.map((x) => [x.key, x.value]))
 }
 
-export interface SweepPoint {
+export interface FormulaSweepPoint {
   x: number
   y: number
 }
@@ -455,10 +542,10 @@ export function sweepFormula(
   values: Record<string, number>,
   key: string,
   n = 120
-): SweepPoint[] {
+): FormulaSweepPoint[] {
   const spec = f.vars.find((x) => x.key === key)
   if (!spec) return []
-  const out: SweepPoint[] = []
+  const out: FormulaSweepPoint[] = []
   for (let i = 0; i <= n; i++) {
     const x = spec.min + ((spec.max - spec.min) * i) / n
     const y = f.evaluate({ ...values, [key]: x })
