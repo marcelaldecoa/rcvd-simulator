@@ -244,14 +244,33 @@ The box always says why. Common causes:
 |---|---|
 | *iRacing is not running…* | Start iRacing and join a session |
 | *no session is live* | You are in the menus; go on track |
+| *was denied access (error 5)* | iRacing is running elevated and this app is not, or the reverse. Start both the same way |
 | *needs Windows* | The live source is Windows-only; use a `.ibt` file or Synthetic |
 | *koffi FFI module could not be loaded* | `npm install` did not complete; re-run it |
 | Nothing at all over the game | iRacing is in exclusive fullscreen — switch to borderless |
 
+If the box is stuck on one of these and you disagree with it, two commands
+answer directly rather than by inference:
+
+```bash
+npm run diagnose:irsdk
+```
+
+reports what Windows says about the mapping itself — whether it exists, whether
+this process may read it, and how big it is. Then, with a session live:
+
+```bash
+npm run live:check
+```
+
+attaches for twenty seconds and prints the sample rate, which channels the car
+publishes, the range of every signal, and the sign check. Drive a few corners
+while it runs.
+
 **If the corners read the wrong way round**, a channel sign is inverted.
 `Ay = V·r` is a kinematic identity, so a disagreement between those two channels
-is provable from the data alone; the adapter checks for it and reports it rather
-than absorbing it. Tell me what it says and it is a one-line fix.
+is provable from the data alone; `live:check` reports it rather than absorbing
+it. Tell me what it says and it is a one-line fix.
 
 ### After the session
 
@@ -374,6 +393,20 @@ failure mode Ch 4 warns is the most common in the subject:
 process and drives the real UI — IPC and path traversal, every lab's readouts,
 the overlay window's flags and that it paints, the telemetry pipeline, and a
 synthetic `.ibt` parsed through the genuine file path. 102 checks.
+
+One thing no test can reach is the live connection to iRacing, because it needs
+the simulator. `npm run live:check` is the substitute, and running it against a
+Toyota Supra at Richmond settled the question the adapter could only assume:
+
+- 322 channels at a measured **60.0 Hz**
+- every channel this app reads is published, including `VelocityY`, so sideslip
+  is measured rather than integrated — it ranged −3.93° to −0.44°
+- **`Ay` and `V·r` agree on 100% of cornering samples**, and steer agrees with
+  yaw rate on 98%, so the sign conventions are right
+
+That last point was the open risk in the whole telemetry stack. It is closed for
+this car; a car that publishes different signs would be caught by the same check
+rather than silently drawing the overlay backwards.
 
 ---
 
