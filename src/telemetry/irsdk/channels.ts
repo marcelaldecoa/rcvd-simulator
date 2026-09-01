@@ -42,6 +42,7 @@ export const CHANNELS = {
   brake: 'Brake',
   lap: 'Lap',
   lapDistPct: 'LapDistPct',
+  heading: 'YawNorth',
   gear: 'Gear',
   rpm: 'RPM'
 } as const
@@ -107,6 +108,12 @@ export function mapSample(
     brake: readNumber(record, vars, CHANNELS.brake),
     lapDistPct: readNumber(record, vars, CHANNELS.lapDistPct),
     lap: readNumber(record, vars, CHANNELS.lap),
+    // Absolute heading, for the track map. Left undefined rather than zero when
+    // the sim does not publish it, so a map can decline to draw rather than
+    // drawing a straight line and calling it a circuit.
+    heading: vars.has(CHANNELS.heading)
+      ? readNumber(record, vars, CHANNELS.heading)
+      : undefined,
     gear: vars.has(CHANNELS.gear) ? readNumber(record, vars, CHANNELS.gear) : undefined,
     engineSpeed: vars.has(CHANNELS.rpm)
       ? (readNumber(record, vars, CHANNELS.rpm) * 2 * Math.PI) / 60
