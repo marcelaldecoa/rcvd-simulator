@@ -22,7 +22,13 @@ import {
   type VarHeader
 } from './irsdk/layout.js'
 import { SharedMemoryReader } from './irsdk/shm.js'
-import { CHANNELS, DEFAULT_SIGNS, mapSample, type SignConvention } from './irsdk/channels.js'
+import {
+  CHANNELS,
+  DEFAULT_SIGNS,
+  mapSample,
+  steeringRatioFromSession,
+  type SignConvention
+} from './irsdk/channels.js'
 import type {
   SessionInfo,
   SetupSnapshot,
@@ -158,11 +164,10 @@ export class LiveIRacingSource implements TelemetrySource {
         this.header.sessionInfoOffset,
         this.header.sessionInfoOffset + this.header.sessionInfoLength
       )
-      // A ratio published by the sim beats the one we guessed.
-      const published = this.yamlValue('DriverCarSteeringRatio')
-      if (published && Number.isFinite(Number(published))) {
-        this.steeringRatio = Number(published)
-      }
+      // A ratio published by the sim beats the one we guessed -- from either
+      // place it can appear, because neither key is on every car.
+      const published = steeringRatioFromSession(this.sessionYaml)
+      if (published !== null) this.steeringRatio = published
       this.detail = `connected — ${this.vars.size} channels at ${this.header.tickRate} Hz`
       this.startLoop()
     } catch (e) {

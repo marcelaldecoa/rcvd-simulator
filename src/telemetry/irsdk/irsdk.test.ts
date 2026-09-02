@@ -10,6 +10,7 @@
 
 import { describe, expect, it } from 'vitest'
 import {
+  CORNER_CHANNELS,
   CORNER_PREFIXES,
   DISK_SUB_HEADER_SIZE,
   HEADER_SIZE,
@@ -25,6 +26,7 @@ import {
   readVarHeaders,
   recordLength,
   requiredBytes,
+  resolveCorners,
   sizeOf
 } from './layout.js'
 import {
@@ -32,7 +34,8 @@ import {
   DEFAULT_SIGNS,
   checkConventions,
   inferSteeringRatio,
-  mapSample
+  mapSample,
+  steeringRatioFromSession
 } from './channels.js'
 import { looksLikeIbt, parseIbt } from '../ibt.js'
 import { toRad } from '../../core/util/numeric.js'
@@ -494,5 +497,96 @@ describe('required region size', () => {
 
   it('is never smaller than the header itself', () => {
     expect(requiredBytes(readHeader(build('')))).toBeGreaterThanOrEqual(HEADER_SIZE)
+  })
+})
+
+describe('channel names that differ between cars', () => {
+  /**
+   * Both of these were found by cataloguing what a real car publishes, and
+   * both had been silently wrong against that car for as long as the code
+   * existed. They share a failure mode: an absent channel is an ORDINARY state
+   * in this SDK, so asking for the wrong name produces no error anywhere —
+   * just a feature that quietly draws nothing.
+   */
+  const shockCar = buildTestBuffer({
+    vars: [
+      { name: 'Speed', type: VarType.Float, values: [40, 40] },
+      // The NASCAR-style naming: an extra SH the code did not ask for.
+      { name: 'LFSHshockVel', type: VarType.Float, values: [0.1, 0.2] },
+      { name: 'RFSHshockVel', type: VarType.Float, values: [0.3, 0.4] },
+      { name: 'LRSHshockVel', type: VarType.Float, values: [0.5, 0.6] },
+      { name: 'RRSHshockVel', type: VarType.Float, values: [0.7, 0.8] }
+    ]
+  })
+
+  it('finds the shock channels under either name', () => {
+    const header = readHeader(shockCar)
+    const vars = indexVars(readVarHeaders(shockCar, header))
+    expect(resolveCorners(vars, CORNER_PREFIXES, CORNER_CHANNELS.shockVel)).toBe('SHshockVel')
+
+    const record = shockCar.subarray(header.buffers[0].bufOffset)
+    const sample = mapSample(record, vars, { steeringRatio: 12 })
+    // Before this, a whole damper histogram drew empty against such a car.
+    // Compared per element: the SDK stores these as float32, so exact equality
+    // fails on values that are entirely correct.
+    expect(sample.shockVelocity).toHaveLength(4)
+    for (const [i, want] of [0.1, 0.3, 0.5, 0.7].entries()) {
+      expect(sample.shockVelocity?.[i]).toBeCloseTo(want, 6)
+    }
+  })
+
+  it('will not mix two namings into one set of corners', () => {
+    const mixed = buildTestBuffer({
+      vars: [
+        { name: 'Speed', type: VarType.Float, values: [40] },
+        { name: 'LFshockVel', type: VarType.Float, values: [0.1] },
+        { name: 'RFSHshockVel', type: VarType.Float, values: [0.3] },
+        { name: 'LRSHshockVel', type: VarType.Float, values: [0.5] },
+        { name: 'RRSHshockVel', type: VarType.Float, values: [0.7] }
+      ]
+    })
+    const header = readHeader(mixed)
+    const vars = indexVars(readVarHeaders(mixed, header))
+    // Three of one name and one of another is not a set. Reporting nothing is
+    // right; reporting three real corners and one from a different sensor
+    // would be a corner-to-corner comparison of two different measurements.
+    expect(resolveCorners(vars, CORNER_PREFIXES, CORNER_CHANNELS.shockVel)).toBeNull()
+  })
+
+  it('does not offer cold pressure as running pressure', () => {
+    // Cold pressure is a garage setting. It does not change as the tyre works,
+    // so substituting it turns "not measured" into a plausible constant, which
+    // is the worse failure of the two.
+    expect(CORNER_CHANNELS.pressure).not.toContain('coldPressure')
+  })
+})
+
+describe('the steering ratio the session declares', () => {
+  /**
+   * A wrong ratio scales every slip angle the overlay draws, and this one hid
+   * behind a coincidence: the code looked only for `DriverCarSteeringRatio`,
+   * that key is absent on a Cup car, and the hardcoded fallback of 12 happened
+   * to equal that car's real 12:1. The right answer by the wrong route.
+   */
+  it('reads the DriverInfo key when a car publishes it', () => {
+    expect(steeringRatioFromSession('DriverInfo:\n DriverCarSteeringRatio: 14.5\n')).toBeCloseTo(14.5, 9)
+  })
+
+  it('reads the CarSetup ratio, colon and all', () => {
+    const yaml = 'CarSetup:\n Chassis:\n  Front:\n   SteeringRatio: 12:1\n   SteeringOffset: +6 deg\n'
+    expect(steeringRatioFromSession(yaml)).toBeCloseTo(12, 9)
+  })
+
+  it('handles a ratio that is not against 1', () => {
+    expect(steeringRatioFromSession('   SteeringRatio: 30:2\n')).toBeCloseTo(15, 9)
+  })
+
+  it('prefers the explicit key over the setup sheet', () => {
+    const yaml = 'DriverCarSteeringRatio: 15.2\nCarSetup:\n   SteeringRatio: 12:1\n'
+    expect(steeringRatioFromSession(yaml)).toBeCloseTo(15.2, 9)
+  })
+
+  it('says nothing rather than guessing when neither is there', () => {
+    expect(steeringRatioFromSession('WeekendInfo:\n TrackName: darlington\n')).toBeNull()
   })
 })

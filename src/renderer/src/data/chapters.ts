@@ -71,6 +71,15 @@ export const CHAPTERS: Chapter[] = [
   },
   {
     n: 0,
+    title: 'Telemetry ⇄ RCVD',
+    file: 'telemetry-and-rcvd.md',
+    part: 'Start here',
+    blurb:
+      'Every channel iRacing publishes, the formula it belongs to, and an honest account of ' +
+      'where the data runs out.'
+  },
+  {
+    n: 0,
     title: 'iRacing Telemetry',
     file: '00-course-overview.md',
     part: 'Start here',
