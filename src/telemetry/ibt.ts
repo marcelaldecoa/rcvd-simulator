@@ -25,7 +25,13 @@ import {
   type IrsdkHeader,
   type VarHeader
 } from './irsdk/layout.js'
-import { DEFAULT_SIGNS, inferSteeringRatio, mapSample, type SignConvention } from './irsdk/channels.js'
+import {
+  DEFAULT_SIGNS,
+  inferSteeringRatio,
+  mapSample,
+  steeringRatioFromSession,
+  type SignConvention
+} from './irsdk/channels.js'
 import type {
   SessionInfo,
   SetupSnapshot,
@@ -97,12 +103,12 @@ export function parseIbt(buf: Buffer, opts: IbtOptions = {}): IbtFile {
   // SESSION FILE knows what car was driven. A ratio configured elsewhere in the
   // app describes the garage car, which may be a different car entirely, and
   // letting it override the file silently corrupts the identification.
-  const published = /^\s*DriverCarSteeringRatio:\s*([\d.]+)/m.exec(sessionInfo)
+  const published = steeringRatioFromSession(sessionInfo)
   let ratio = 0
   let source: IbtFile['steeringRatioSource'] = 'inferred'
 
-  if (published && Number(published[1]) > 0) {
-    ratio = Number(published[1])
+  if (published !== null) {
+    ratio = published
     source = 'session file'
   } else if ((opts.steeringRatio ?? 0) > 0) {
     ratio = opts.steeringRatio as number

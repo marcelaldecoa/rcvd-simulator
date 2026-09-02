@@ -26,6 +26,7 @@ slip-angle overlay on screen.
 - [Reading it alongside the book](#reading-it-alongside-the-book) ← **start here**
 - [The garage](#the-garage)
 - [iRacing telemetry and the overlay](#iracing-telemetry-and-the-overlay)
+- [What iRacing can and cannot tell you](#what-iracing-can-and-cannot-tell-you)
 - [Running it](#running-it)
 - [What is in each lab](#what-is-in-each-lab)
 - [Layout](#layout)
@@ -348,6 +349,37 @@ Sounds are synthesised, not sampled — nothing to ship, and *tone*, *blip* and
 
 ---
 
+## What iRacing can and cannot tell you
+
+**[`docs/telemetry-and-rcvd.md`](docs/telemetry-and-rcvd.md)** — also readable
+in the app, under *Telemetry ⇄ RCVD*.
+
+A catalogue of every channel a real session publishes, the RCVD formula each one
+belongs to, and an honest account of where the data runs out. Read off a live
+session rather than from documentation: 322 channels from a Cup car at
+Darlington, plus the session string.
+
+The short version:
+
+| | Chapters |
+|---|---|
+| **Directly measurable** | 4, 5, 6, 9, 11, 12 |
+| **Measurable with the setup sheet** | 16, 20, 21, 22 |
+| **Inferable, given a mass** | 2, 7, 15, 18, 19 |
+| **Out of reach** | 8, 14, 23 |
+
+The one sentence worth carrying: **iRacing publishes motion, not force.** Every
+accelerometer and gyro you could want is there; not one tyre force, wheel load
+or slip ratio is. So RCVD's left-hand side is measured and its right-hand side
+has to be reconstructed — which is the same position a race engineer is in
+without instrumented hubs, i.e. most of them.
+
+The other half people miss is the **session string**, which carries spring
+rates, corner weights, camber, caster, ARB diameter, brake bias and the steering
+ratio. Telemetry gives you the response; that gives you the car.
+
+---
+
 ## Running it
 
 ```bash
@@ -359,8 +391,8 @@ npm run dev
 |---|---|
 | `npm run dev` | The desktop app. Telemetry and the overlay need this |
 | `npm run dev:web` | Labs in a plain browser; no Electron, no telemetry |
-| `npm test` | 697 unit tests |
-| `npm run smoke` | 107 checks in a real Electron window — IPC, every lab, the overlay |
+| `npm test` | 705 unit tests |
+| `npm run smoke` | 110 checks in a real Electron window — IPC, every lab, the overlay |
 | `npm run capture:overlay` | Regenerate the screenshots in `docs/images/` |
 | `npm run dist` | A Windows installer into `release/` |
 
@@ -444,7 +476,7 @@ failure mode Ch 4 warns is the most common in the subject:
 `npm run smoke` covers what unit tests cannot: it launches the compiled main
 process and drives the real UI — IPC and path traversal, every lab's readouts,
 the overlay window's flags and that it paints, the telemetry pipeline, and a
-synthetic `.ibt` parsed through the genuine file path. 107 checks.
+synthetic `.ibt` parsed through the genuine file path. 110 checks.
 
 One thing no test can reach is the live connection to iRacing, because it needs
 the simulator. `npm run live:check` is the substitute, and running it against a

@@ -26,7 +26,13 @@
  */
 
 import type { TelemetrySample } from '../types.js'
-import { CORNER_PREFIXES, readCorners, readNumber, type VarHeader } from './layout.js'
+import {
+  CORNER_CHANNELS,
+  CORNER_PREFIXES,
+  readCorners,
+  readNumber,
+  type VarHeader
+} from './layout.js'
 
 /** Channel names read from the SDK. Absent ones degrade rather than throw. */
 export const CHANNELS = {
@@ -111,12 +117,14 @@ export function mapSample(
     engineSpeed: vars.has(CHANNELS.rpm)
       ? (readNumber(record, vars, CHANNELS.rpm) * 2 * Math.PI) / 60
       : undefined,
-    rideHeight: readCorners(record, vars, CORNER_PREFIXES, 'rideHeight'),
-    shockDeflection: readCorners(record, vars, CORNER_PREFIXES, 'shockDefl'),
-    shockVelocity: readCorners(record, vars, CORNER_PREFIXES, 'shockVel'),
-    tireTemp: readCorners(record, vars, CORNER_PREFIXES, 'tempM'),
+    rideHeight: readCorners(record, vars, CORNER_PREFIXES, CORNER_CHANNELS.rideHeight),
+    shockDeflection: readCorners(record, vars, CORNER_PREFIXES, CORNER_CHANNELS.shockDefl),
+    shockVelocity: readCorners(record, vars, CORNER_PREFIXES, CORNER_CHANNELS.shockVel),
+    tireTemp: readCorners(record, vars, CORNER_PREFIXES, CORNER_CHANNELS.tempM),
     // iRacing publishes pressures in kPa; the app's model is SI.
-    tirePressure: readCorners(record, vars, CORNER_PREFIXES, 'pressure')?.map((p) => p * 1000) as
+    tirePressure: readCorners(record, vars, CORNER_PREFIXES, CORNER_CHANNELS.pressure)?.map(
+      (p) => p * 1000
+    ) as
       | [number, number, number, number]
       | undefined
   }
@@ -252,4 +260,35 @@ export function inferSteeringRatio(
 
   const ratio = (s1y * s22 - s2y * s12) / det
   return ratio > 1 && ratio < 40 ? ratio : null
+}
+
+/**
+ * The steering ratio the session declares, from wherever it declares it.
+ *
+ * There are two places and neither is universal, which is how this went wrong:
+ * the code looked only for `DriverCarSteeringRatio`, that key is absent on a
+ * NASCAR-style car, and the silent fallback was a hardcoded 12. On the car this
+ * was found with -- a Cup car at 12:1 -- the wrong path produced the right
+ * number, so nothing looked broken. On a car at 15:1 every slip angle the
+ * overlay draws would have been out by a quarter.
+ *
+ * The setup form is a ratio, `12:1`, not a bare number, and its colon is why a
+ * numeric regex over the whole document does not find it.
+ */
+export function steeringRatioFromSession(sessionInfo: string): number | null {
+  const direct = /^\s*DriverCarSteeringRatio:\s*([\d.]+)/m.exec(sessionInfo)
+  if (direct && Number(direct[1]) > 0) return Number(direct[1])
+
+  // CarSetup: Chassis: Front: SteeringRatio: 12:1
+  const setup = /^\s*SteeringRatio:\s*([\d.]+)\s*:\s*([\d.]+)/m.exec(sessionInfo)
+  if (setup) {
+    const ratio = Number(setup[1]) / Number(setup[2])
+    if (Number.isFinite(ratio) && ratio > 0) return ratio
+  }
+
+  // And a bare number under that key, for whatever publishes it that way.
+  const bare = /^\s*SteeringRatio:\s*([\d.]+)\s*$/m.exec(sessionInfo)
+  if (bare && Number(bare[1]) > 0) return Number(bare[1])
+
+  return null
 }

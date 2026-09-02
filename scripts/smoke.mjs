@@ -1384,6 +1384,44 @@ app.whenReady().then(async () => {
   })()`)
   record('notes render with KaTeX', katex > 10, `${katex} typeset expressions`)
 
+  // The telemetry reference. It is a document rather than a lab, so what is
+  // worth asserting is that it reaches the reader intact: the mapping tables
+  // are the substance and the maths has to be typeset, not printed as source.
+  const ref = await js(`(async () => {
+    const target = [...document.querySelectorAll('.nav-item')].find(
+      e => e.textContent.includes('Telemetry') && e.textContent.includes('RCVD')
+    )
+    if (!target) throw new Error('telemetry reference not in the nav')
+    target.click()
+    await new Promise(r => setTimeout(r, 1800))
+    const el = document.querySelector('.content')
+    const text = el ? el.innerText : ''
+    return {
+      chars: text.length,
+      tables: document.querySelectorAll('.content table').length,
+      rows: document.querySelectorAll('.content tbody tr').length,
+      katex: document.querySelectorAll('.content .katex').length,
+      rawTex: /[$][$]|[\]frac|[\]alpha/.test(text),
+      namesTrap: /LFSHshockDefl/.test(text)
+    }
+  })()`)
+
+  record(
+    'the telemetry reference renders',
+    ref.chars > 8000 && ref.tables >= 5,
+    `${ref.chars} chars, ${ref.tables} tables, ${ref.rows} mapping rows`
+  )
+  record(
+    'its formulas are typeset rather than printed as source',
+    ref.katex > 10 && !ref.rawTex,
+    `${ref.katex} expressions, raw TeX left over: ${ref.rawTex}`
+  )
+  record(
+    'it records the channel-naming trap that cost the damper histogram',
+    ref.namesTrap,
+    'the LFSHshockDefl case is documented'
+  )
+
   record('no console errors', consoleErrors.length === 0, consoleErrors.slice(0, 3).join(' | '))
 
   clearTimeout(watchdog)

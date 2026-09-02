@@ -200,16 +200,60 @@ export function readCorners(
   record: Buffer,
   vars: Map<string, VarHeader>,
   prefixes: [string, string, string, string],
-  suffix: string
+  suffix: string | readonly string[]
 ): [number, number, number, number] | undefined {
-  if (!prefixes.every((p) => vars.has(p + suffix))) return undefined
-  return prefixes.map((p) => readNumber(record, vars, p + suffix)) as [
+  const found = resolveCorners(vars, prefixes, suffix)
+  if (!found) return undefined
+  return prefixes.map((p) => readNumber(record, vars, p + found)) as [
     number,
     number,
     number,
     number
   ]
 }
+
+/**
+ * Which of several candidate suffixes this car actually publishes.
+ *
+ * iRacing does not use one name per measurement across the fleet. The same
+ * shock deflection is `LFshockDefl` on one car and `LFSHshockDefl` on another,
+ * and asking for only the first silently returns nothing on the second -- which
+ * is exactly what happened here: a whole damper histogram drew empty against a
+ * car that was publishing the data under a name this code did not ask for, and
+ * nothing reported a problem because "channel absent" is an ordinary state.
+ *
+ * Candidates are tried in order, and all four corners must agree, so a car with
+ * three of one name and one of another is treated as having neither rather than
+ * mixing two different measurements into one set.
+ */
+export function resolveCorners(
+  vars: Map<string, VarHeader>,
+  prefixes: [string, string, string, string],
+  suffix: string | readonly string[]
+): string | null {
+  for (const candidate of typeof suffix === 'string' ? [suffix] : suffix) {
+    if (prefixes.every((p) => vars.has(p + candidate))) return candidate
+  }
+  return null
+}
+
+/**
+ * The per-corner channels this app reads, with the names to try.
+ *
+ * Deliberately NOT including `coldPressure` as a fallback for `pressure`. Cold
+ * pressure is a garage setting, not a measurement -- it does not change as the
+ * tyre works -- so substituting it would turn "we could not measure this" into
+ * a plausible constant, which is the worse failure.
+ */
+export const CORNER_CHANNELS = {
+  rideHeight: ['rideHeight'],
+  shockDefl: ['shockDefl', 'SHshockDefl'],
+  shockVel: ['shockVel', 'SHshockVel'],
+  // Tread middle where published, carcass middle otherwise. Different
+  // measurements of the same tyre, and the second is the one most cars give.
+  tempM: ['tempM', 'tempCM'],
+  pressure: ['pressure']
+} as const
 
 export const CORNER_PREFIXES: [string, string, string, string] = ['LF', 'RF', 'LR', 'RR']
 
